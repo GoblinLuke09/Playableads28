@@ -3,7 +3,9 @@ import Phaser from 'phaser';
 // Import all textures
 import bgImg from './assets/Texture/bg_stadium.png';
 import trophyCleanImg from './assets/Texture/trophy_clean.png';
+import trophyWetImg from './assets/Texture/trophy_wet.png';
 import trophyDirtyImg from './assets/Texture/trophy_dirty.png';
+import trophyShadowImg from './assets/Texture/shadow.png';
 import mudSplatterImg from './assets/Texture/mud_splatter.png';
 import sparkleImg from './assets/Texture/sparkle.png';
 import radialGlowImg from './assets/Texture/radial_glow.png';
@@ -13,6 +15,7 @@ import progressFillImg from './assets/Texture/progress_fill.png';
 import gunNozzleImg from './assets/Texture/gun_nozzle.png';
 import handImg from './assets/Texture/hand.png';
 import waterImg from './assets/Texture/water.png';
+import waterDropsImg from './assets/Texture/water_drops.png';
 
 // Import sounds
 import spraySnd from './assets/Sound/spray.wav';
@@ -30,7 +33,9 @@ export class GameScene extends Phaser.Scene {
         // Load textures
         this.load.image('bg_stadium', bgImg);
         this.load.image('trophy_clean', trophyCleanImg);
+        this.load.image('trophy_wet', trophyWetImg);
         this.load.image('trophy_dirty', trophyDirtyImg);
+        this.load.image('trophy_shadow',trophyShadowImg);
         this.load.image('mud_splatter', mudSplatterImg);
         this.load.image('sparkle', sparkleImg);
         this.load.image('radial_glow', radialGlowImg);
@@ -40,6 +45,7 @@ export class GameScene extends Phaser.Scene {
         this.load.image('gun_nozzle', gunNozzleImg);
         this.load.image('hand', handImg);
         this.load.image('water', waterImg);
+        this.load.image('water_drops', waterDropsImg);
 
         // Load audio
         this.load.audio('spray', spraySnd);
@@ -47,11 +53,20 @@ export class GameScene extends Phaser.Scene {
         this.load.audio('sparkle', sparkleSnd);
         this.load.audio('win', winSnd);
         this.load.audio('click', clickSnd);
+
+        // Tạo mảnh pháo hoa giấy (Confetti) hình chữ nhật nhỏ
+        let cGraphics = this.make.graphics({ x: 0, y: 0, add: false });
+        cGraphics.fillStyle(0xffffff, 1);
+        cGraphics.fillRect(0, 0, 10, 6); // Mảnh giấy 10x6
+        cGraphics.generateTexture('confetti', 10, 6);
+
     }
 
     create() {
-        this.gameWidth = this.scale.width;
-        this.gameHeight = this.scale.height;
+
+
+        this.gameWidth = 450;
+        this.gameHeight = 800;
         this.isGameEnd = false;
         this.isSpraying = false;
         this.isAudioPlaying = false; // Biến kiểm tra âm thanh phun nước đang phát hay chưa
@@ -63,8 +78,8 @@ export class GameScene extends Phaser.Scene {
 
         this.targetShiftY = 0;
         this.currentShiftY = 0;
-        this.baseTrophyY = this.scale.height * 0.48;
-        this.baseBgY = this.scale.height / 2;
+        this.baseTrophyY = this.gameHeight * 0.48;
+        this.baseBgY = this.gameHeight * 0.35;
 
         // Sound instances
         this.spraySound = this.sound.add('spray', { loop: true, volume: 0.55 });
@@ -72,12 +87,19 @@ export class GameScene extends Phaser.Scene {
         this.winSound = this.sound.add('win', { volume: 0.9 });
         this.clickSound = this.sound.add('click', { volume: 0.8 });
 
-        // 1. Background — cover full canvas with margin for camera zoom
-        const { width, height } = this.scale;
-        this.bg = this.add.image(width / 2, this.baseBgY, 'bg_stadium');
+
+        const actualWidth = this.scale.width;
+        const actualHeight = this.scale.height;
+        const dx = (actualWidth - this.gameWidth ) / 2;
+        const dy = (actualHeight - this.gameHeight) / 2;
+        this.cameras.main.setScroll(-dx, -dy);
+
+
+        //const { width, height } = {this.gameWidth,this.gameHeight};
+        this.bg = this.add.image(this.gameWidth / 2 - 10, this.baseBgY, 'bg_stadium');
         this.bg.setDepth(-1);
-        const bgScaleX = width / this.bg.width;
-        const bgScaleY = height / this.bg.height;
+        const bgScaleX = this.gameWidth / this.bg.width;
+        const bgScaleY = this.gameHeight / this.bg.height;
         this.bg.setScale(Math.max(bgScaleX, bgScaleY) * 1.65);
 
         // Set initial wide camera zoom (1.4x wider view)
@@ -125,7 +147,9 @@ export class GameScene extends Phaser.Scene {
     }
 
     setupTrophy() {
-        const { width, height } = this.scale;
+        const width = this.gameWidth;
+        const height = this.gameHeight;
+
         this.trophyX = width / 2;
         this.baseTrophyY = height * 0.38;
         this.trophyY = this.baseTrophyY;
@@ -134,8 +158,8 @@ export class GameScene extends Phaser.Scene {
         const scale = targetTrophyHeight / 1024;
         this.trophyScale = scale;
 
-        this.trophyDisplayW = 492 * scale;
-        this.trophyDisplayH = 1024 * scale;
+        this.trophyDisplayW = 1040 * scale;
+        this.trophyDisplayH = 1000 * scale;
 
         // Glow behind trophy for victory (Depth 4)
         this.trophyGlow = this.add.image(this.trophyX, this.trophyY, 'radial_glow');
@@ -144,10 +168,19 @@ export class GameScene extends Phaser.Scene {
         this.trophyGlow.setTint(0xffdf66);
         this.trophyGlow.setAlpha(0);
 
+        this.trophyShadow = this.add.image(this.trophyX, this.trophyY + 145, 'trophy_shadow');
+        this.trophyShadow.setScale(0.45);
+        this.trophyShadow.setDepth(3);
+
         // Clean Golden Trophy Underneath (Depth 5)
         this.trophyClean = this.add.image(this.trophyX, this.trophyY, 'trophy_clean');
         this.trophyClean.setDepth(5);
         this.trophyClean.setDisplaySize(this.trophyDisplayW, this.trophyDisplayH);
+
+        // Wet Trophy Layer on top of Clean (Depth 6) - revealed when cleaning
+        this.trophyWet = this.add.image(this.trophyX, this.trophyY, 'trophy_wet');
+        this.trophyWet.setDepth(6);
+        this.trophyWet.setDisplaySize(this.trophyDisplayW, this.trophyDisplayH);
 
         // Create Dynamic Canvas Texture for the Dirty Mud Layer on top (Depth 10)
         const dirtySource = this.textures.get('trophy_dirty').getSourceImage();
@@ -157,6 +190,9 @@ export class GameScene extends Phaser.Scene {
         if (this.textures.exists('mud_canvas_tex')) {
             this.textures.remove('mud_canvas_tex');
         }
+
+
+
 
         this.mudCanvas = this.textures.createCanvas('mud_canvas_tex', this.dirtyCanvasW, this.dirtyCanvasH);
         this.mudCtx = this.mudCanvas.context;
@@ -202,52 +238,51 @@ export class GameScene extends Phaser.Scene {
     }
 
     setupEffects() {
-        // Water beam graphic (subtle core line only, depth 14)
+        // Water beam graphic (cleared, using particle funnel instead)
         this.waterGraphics = this.add.graphics();
         this.waterGraphics.setDepth(14);
 
-        // === WATER PARTICLES ALONG THE STREAM (Depth 16) ===
-        // Spawned at nozzle tip, fly along beam direction, many & dense
+        // === WATER FUNNEL STREAM PARTICLES (Depth 16) ===
+        // Shoots from nozzle tip expanding outward in a funnel / cone shape
         this.waterStreamEmitter = this.add.particles(0, 0, 'water', {
-            speed: { min: 300, max: 460 },
-            angle: { min: -92, max: -88 }, // straight up, overridden per-frame
-            scale: { start: 1.6, end: 0.5 },
-            alpha: { start: 0.95, end: 0.4 },
-            lifespan: { min: 200, max: 300 },
-            tint: [0x9ee4ff, 0xc8f0ff, 0xe8f8ff, 0xffffff],
-            frequency: 10, // emit every 10ms
-            quantity: 5,   // 5 particles per emit
+            speed: { min: 450, max: 700 },
+            angle: { min: -95, max: -85 }, // Wide cone
+            scale: { start: 0.05, end: 0.1 }, // Expands into funnel shape
+            alpha: { start: 0.95, end: 0.15 },
+            lifespan: { min: 220, max: 280 },
+            tint: [0xffffff, 0xe0f7ff, 0xafe5ff, 0x78d4ff],
+            frequency: 2,
+            quantity: 5,
             emitting: false
         });
         this.waterStreamEmitter.setDepth(16);
 
-        // === WATER IMPACT — 3 sequential drops, grow & fall gently (Depth 17) ===
-        // frequency = lifespan/3 so 3 drops always exist in different stages
+        // === WATER IMPACT — drops bursting at hit target (Depth 18) ===
         this.waterEmitter = this.add.particles(0, 0, 'water', {
-            speed: { min: 80, max: 180 },    // visible fall speed
-            angle: { min: 0, max: 360 },    // pointing mostly downward
-            scale: { start: 1, end: 3.5 }, // grows as it falls
+            speed: { min: 80, max: 220 },
+            angle: { min: 0, max: 360 },
+            scale: { start: 0.45, end: 0.9 },
             alpha: { start: 1.0, end: 0 },
-            lifespan: 600,
-            gravityY: 300,                   // pulls it down clearly
+            lifespan: 500,
+            gravityY: 200,
             tint: [0xaaeeff, 0xddf5ff, 0xffffff, 0x88ccff],
-            frequency: 100,   // = lifespan/3, creates 3 sequential drops
-            quantity: 1,
+            frequency: 80,
+            quantity: 2,
             emitting: false
         });
-        this.waterEmitter.setDepth(17);
+        this.waterEmitter.setDepth(18);
 
-        // === SECOND LAYER — slightly offset, smaller (Depth 15) ===
+        // === SECOND LAYER — mist splash (Depth 15) ===
         this.waterMistEmitter = this.add.particles(0, 0, 'water', {
-            speed: { min: 60, max: 140 },
+            speed: { min: 60, max: 160 },
             angle: { min: 0, max: 360 },
-            scale: { start: 1, end: 2.5 },
+            scale: { start: 0.4, end: 0.8 },
             alpha: { start: 0.75, end: 0 },
-            lifespan: 540,
-            gravityY: 250,
+            lifespan: 600,
+            gravityY: 150,
             tint: [0xccf0ff, 0xeefaff, 0xffffff],
-            frequency: 90,   // = lifespan/3
-            quantity: 1,
+            frequency: 70,
+            quantity: 2,
             emitting: false
         });
         this.waterMistEmitter.setDepth(15);
@@ -262,13 +297,17 @@ export class GameScene extends Phaser.Scene {
         this.sprayDomeGlow.setVisible(false);
 
         // Mud splatter particles (Depth 18)
-        this.mudEmitter = this.add.particles(0, 0, 'mud_splatter', {
+        this.mudEmitter 
+        = this.add.particles(0, 0, 'mud_splatter', {
             speed: { min: 70, max: 200 },
             angle: { min: 0, max: 360 },
-            scale: { start: 0.15, end: 0 },
+            scale: { start: 0.15, end: 0.3 },
             alpha: { start: 1.0, end: 0 },
-            lifespan: 420,
+            lifespan: 1000,
+            gravityY: 100,    
             tint: [0x5c3317, 0x4a2810, 0x784420],
+            frequency: 100, 
+            quantity: 1,
             emitting: false
         });
         this.mudEmitter.setDepth(18);
@@ -287,7 +326,8 @@ export class GameScene extends Phaser.Scene {
     }
 
     setupWaterGun() {
-        const { width, height } = this.scale;
+        const width = this.gameWidth;
+        const height = this.gameHeight;
         this.gunContainer = this.add.container(width * 0.72, height * 0.78);
         this.gunContainer.setDepth(25);
 
@@ -351,16 +391,6 @@ export class GameScene extends Phaser.Scene {
         }).setOrigin(0.5);
         this.topUI.add(this.promptText);
 
-        // this.ctaBtn = this.add.image(width / 2, height * 0.92, 'btn_try_now');
-        // this.ctaBtn.setDepth(35);
-        // this.ctaBtn.setScale(0.9);
-        // this.ctaBtn.setInteractive({ useHandCursor: true });
-        // this.ctaBtn.on('pointerdown', (pointer) => {
-        //     pointer.event.stopPropagation();
-        //     this.clickSound.play();
-        //     this.ShowStore();
-        // });
-
         this.tweens.add({
             targets: this.ctaBtn,
             scaleX: 0.98,
@@ -374,6 +404,7 @@ export class GameScene extends Phaser.Scene {
 
     setupCameras() {
         const { width, height } = this.scale;
+
         this.uiCamera = this.cameras.add(0, 0, width, height);
         this.uiCamera.setZoom(1.0);
 
@@ -386,8 +417,10 @@ export class GameScene extends Phaser.Scene {
         const worldElements = [
             this.bg,
             this.trophyClean,
+            this.trophyWet,
             this.trophyMud,
             this.trophyGlow,
+            this.trophyShadow,
             this.waterGraphics,
             this.waterStreamEmitter,
             this.waterEmitter,
@@ -414,7 +447,9 @@ export class GameScene extends Phaser.Scene {
     }
 
     setupTutorial() {
-        const { width, height } = this.scale;
+                const width = this.gameWidth;
+        const height = this.gameHeight;
+
         this.tutorialContainer = this.add.container(width * 0.72, height * 0.78);
         this.tutorialContainer.setDepth(28);
 
@@ -425,7 +460,7 @@ export class GameScene extends Phaser.Scene {
         this.tutorialTween = this.tweens.add({
             targets: this.tutorialHand,
             x: { from: 10, to: -60 },
-            y: { from: 0, to: -80 },
+            y: { from: -160, to: -320 },
             yoyo: true,
             repeat: -1,
             duration: 1100,
@@ -529,7 +564,7 @@ export class GameScene extends Phaser.Scene {
 
         // Position the tool directly at the player's touch / cursor
         const gunBaseX = pointerX;
-        const gunBaseY = pointerY;
+        const gunBaseY = pointerY + 100;
 
         this.gunContainer.setPosition(gunBaseX, gunBaseY);
 
@@ -549,39 +584,28 @@ export class GameScene extends Phaser.Scene {
         const tipY = gunBaseY + Math.sin(angle) * this.gunTipOffset;
 
         // Water jet impact point ahead of the nozzle tip
-        const jetLength = 120;
+        const jetLength = 150;
         const hitX = tipX + Math.cos(angle) * jetLength;
         const hitY = tipY + Math.sin(angle) * jetLength;
 
-        // === WATER STREAM: emit water particles from tip flying along beam direction ===
+        // Clear graphics
         this.waterGraphics.clear();
-        // Core beam line — wider for visibility
-        this.waterGraphics.lineStyle(10, 0xd4f4ff, 0.5);
-        this.waterGraphics.lineBetween(tipX, tipY, hitX, hitY);
-        this.waterGraphics.lineStyle(5, 0xffffff, 0.8);
-        this.waterGraphics.lineBetween(tipX, tipY, hitX, hitY);
 
-        // Stream particles: shoot from nozzle tip in beam direction
+        // Stream particles: shoot from nozzle tip expanding outwards like a funnel
         const angleDeg2 = Phaser.Math.RadToDeg(angle);
-        this.waterStreamEmitter.setPosition(tipX, tipY);
-        this.waterStreamEmitter.setAngle({ min: angleDeg2 - 4, max: angleDeg2 + 4 });
-        if (!this.waterStreamEmitter.emitting) this.waterStreamEmitter.start();
 
-        // Spawn extra particles along beam for full-length density
-        const steps = 6;
-        for (let i = 1; i <= steps; i++) {
-            const t = i / steps;
-            const bx = tipX + Math.cos(angle) * jetLength * t;
-            const by = tipY + Math.sin(angle) * jetLength * t;
-            this.waterStreamEmitter.emitParticleAt(bx, by, 2);
-        }
+        // Expanding funnel stream
+        this.waterStreamEmitter.setPosition(tipX, tipY);
+        this.waterStreamEmitter.setEmitterAngle({ min: angleDeg2 - 18, max: angleDeg2 + 18 });
+        if (!this.waterStreamEmitter.emitting) this.waterStreamEmitter.start();
 
         // Impact particles at hit point
         this.waterEmitter.setPosition(hitX, hitY);
-        this.waterEmitter.setAngle({ min: angleDeg2 + 110, max: angleDeg2 + 250 });
+        this.waterEmitter.setEmitterAngle({ min: angleDeg2 + 100, max: angleDeg2 + 260 });
         if (!this.waterEmitter.emitting) this.waterEmitter.start();
 
         this.waterMistEmitter.setPosition(hitX, hitY);
+        this.waterMistEmitter.setEmitterAngle({ min: 0, max: 360 });
         if (!this.waterMistEmitter.emitting) this.waterMistEmitter.start();
 
         // Glow at impact
@@ -690,8 +714,9 @@ export class GameScene extends Phaser.Scene {
                 this.sparkleEmitter.explode(4);
             }
 
-            if (this.progress >= 85 && !this.isGameEnd) {
+            if (this.progress >= 95 && !this.isGameEnd) {
                 this.triggerWin();
+                this.createConfetti();
             }
         }
     }
@@ -702,11 +727,13 @@ export class GameScene extends Phaser.Scene {
         this.percentText.setText(`${this.progress}%`);
     }
 
+
     triggerWin() {
         this.isGameEnd = true;
         this.isSpraying = false;
         this.stopSpraySound();
         this.waterGraphics.clear();
+        this.waterStreamEmitter.stop();
         this.waterEmitter.stop();
         this.mudEmitter.stop();
         this.hideTutorial();
@@ -721,10 +748,19 @@ export class GameScene extends Phaser.Scene {
             duration: 350
         });
 
+        // Gradually transition wet trophy to clean golden trophy
+        this.tweens.add({
+            targets: this.trophyWet,
+            alpha: 0,
+            duration: 1200,
+            delay: 300,
+            ease: 'Sine.easeInOut'
+        });
+
         // Retract water gun smoothly
         this.tweens.add({
             targets: this.gunContainer,
-            y: this.gameHeight + 250,
+            y: this.gameHeight + 2500,
             duration: 600,
             ease: 'Back.easeIn'
         });
@@ -744,17 +780,6 @@ export class GameScene extends Phaser.Scene {
             repeat: -1,
             ease: 'Sine.easeInOut'
         });
-
-        // // Trophy celebratory bounce & pulse
-        // this.tweens.add({
-        //     targets: this.trophyClean,
-        //     scaleX: 1.08,
-        //     scaleY: 1.08,
-        //     duration: 550,
-        //     yoyo: true,
-        //     repeat: 2,
-        //     ease: 'Back.easeOut'
-        // });
 
         // Sparkle burst around the trophy
         this.time.addEvent({
@@ -852,8 +877,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     handleResize(gameSize) {
-        const width = gameSize.width;
-        const height = gameSize.height;
+        const { width, height } = this.scale;
         this.gameWidth = width;
         this.gameHeight = height;
 
@@ -876,6 +900,9 @@ export class GameScene extends Phaser.Scene {
 
         if (this.trophyClean) {
             this.trophyClean.setPosition(this.trophyX, this.trophyY).setDisplaySize(this.trophyDisplayW, this.trophyDisplayH);
+            if (this.trophyWet) {
+                this.trophyWet.setPosition(this.trophyX, this.trophyY).setDisplaySize(this.trophyDisplayW, this.trophyDisplayH);
+            }
             this.trophyGlow.setPosition(this.trophyX, this.trophyY);
             if (this.trophyMud) {
                 this.trophyMud.setPosition(this.trophyX, this.trophyY).setDisplaySize(this.trophyDisplayW, this.trophyDisplayH);
@@ -894,6 +921,48 @@ export class GameScene extends Phaser.Scene {
             this.tutorialContainer.setPosition(width / 2, this.trophyY);
         }
     }
+
+    createConfetti() {
+        const colors = [0xff0000, 0x00ff00, 0x0000ff, 0xffff00, 0xff00ff, 0x00ffff, 0xff8800];
+        
+        // Tạo 2 emitter
+        const leftCannon = this.add.particles(-10, 600, 'confetti', {
+            speed: { min: 400, max: 800 },
+            angle: { min: -80, max: -60 }, // Bắn lên trên xiên phải
+            gravityY: 500,
+            lifespan: 4000,
+            scale: { start: 1.5, end: 0.5 },
+            rotate: { min: 0, max: 720 },
+            tint: colors,
+            quantity: 50
+        });
+
+        const rightCannon = this.add.particles(500, 600, 'confetti', {
+            speed: { min: 400, max: 800 },
+            angle: { min: -130, max: -100 }, // Bắn lên trên xiên trái
+            gravityY: 500,
+            lifespan: 4000,
+            scale: { start: 1.5, end: 0.5 },
+            rotate: { min: 0, max: 720 },
+            tint: colors,
+            quantity: 50
+        });
+
+        // ĐẶT DEPTH CỰC CAO ĐỂ CHỐNG BỊ CHE
+        leftCannon.setDepth(5000);
+        rightCannon.setDepth(5000);
+
+        // Phát nổ 1 lần duy nhất
+        leftCannon.explode();
+        rightCannon.explode();
+
+        // Tự hủy sau 5 giây để nhẹ máy
+        this.time.delayedCall(5000, () => {
+            leftCannon.destroy();
+            rightCannon.destroy();
+        });
+    }
+
 
     ShowStore() {
         const storeUrl = "https://play.google.com/store/apps/details?id=com.d28.makeover.asmr.home.cleaning.game";

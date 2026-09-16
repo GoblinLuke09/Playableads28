@@ -1,7 +1,12 @@
 import Phaser from 'phaser';
-import { GameScene } from './GameScene.js';
 
-window.Phaser = Phaser;
+// BƯỚC QUAN TRỌNG: Gán Phaser vào biến toàn cục window
+// Điều này giúp Plugin Spine tìm thấy thư viện Phaser để tự đăng ký
+window.Phaser = Phaser; 
+
+import { GameScene } from './GameScene.js';
+// Nạp Plugin Spine SAU KHI đã gán window.Phaser
+import { SpinePlugin } from '@esotericsoftware/spine-phaser-v4';
 
 const baseWidth = 450;
 const baseHeight = 800;
@@ -34,16 +39,10 @@ const config = {
 
 const game = new Phaser.Game(config);
 
-// Resize listener
-window.addEventListener('resize', () => {
-    if (game && game.scale) {
-        game.scale.resize(window.innerWidth, window.innerHeight);
-    }
-});
-
-// Expose global methods for Playturbo / Mintegral / Ad networks
+// Expose global methods for Playturbo/Mintegral tracking API compliance
 window.gameStart = function() {
     console.log("Playturbo: gameStart triggered");
+    // Resume game audio context or start music/actions if needed
     if (game && game.sound && game.sound.context && game.sound.context.state === 'suspended') {
         game.sound.context.resume();
     }
@@ -52,4 +51,3 @@ window.gameStart = function() {
 window.gameClose = function() {
     console.log("Playturbo: gameClose triggered");
 };
-
