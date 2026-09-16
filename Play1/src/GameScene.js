@@ -1,28 +1,28 @@
 import Phaser from 'phaser';
 
 // Import all textures
-import bgImg from './assets/Texture/bg_stadium.png';
-import trophyCleanImg from './assets/Texture/trophy_clean.png';
-import trophyWetImg from './assets/Texture/trophy_wet.png';
-import trophyDirtyImg from './assets/Texture/trophy_dirty.png';
-import trophyShadowImg from './assets/Texture/shadow.png';
-import mudSplatterImg from './assets/Texture/mud_splatter.png';
-import sparkleImg from './assets/Texture/sparkle.png';
-import radialGlowImg from './assets/Texture/radial_glow.png';
-import btnTryNowImg from './assets/Texture/btn_try_now.png';
-import progressBgImg from './assets/Texture/progress_bg.png';
-import progressFillImg from './assets/Texture/progress_fill.png';
-import gunNozzleImg from './assets/Texture/gun_nozzle.png';
-import handImg from './assets/Texture/hand.png';
-import waterImg from './assets/Texture/water.png';
-import waterDropsImg from './assets/Texture/water_drops.png';
+import bgImg from './assets/Texture/bg_stadium.webp';
+import trophyCleanImg from './assets/Texture/trophy_clean.webp';
+import trophyWetImg from './assets/Texture/trophy_wet.webp';
+import trophyDirtyImg from './assets/Texture/trophy_dirty.webp';
+import trophyShadowImg from './assets/Texture/shadow.webp';
+import mudSplatterImg from './assets/Texture/mud_splatter.webp';
+import sparkleImg from './assets/Texture/sparkle.webp';
+import radialGlowImg from './assets/Texture/radial_glow.webp';
+import btnTryNowImg from './assets/Texture/btn_try_now.webp';
+import progressBgImg from './assets/Texture/progress_bg.webp';
+import progressFillImg from './assets/Texture/progress_fill.webp';
+import gunNozzleImg from './assets/Texture/gun_nozzle.webp';
+import handImg from './assets/Texture/hand.webp';
+import waterImg from './assets/Texture/water.webp';
+import waterDropsImg from './assets/Texture/water_drops.webp';
 
 // Import sounds
-import spraySnd from './assets/Sound/spray.wav';
-import mudWashSnd from './assets/Sound/mud_wash.wav';
-import sparkleSnd from './assets/Sound/sparkle.wav';
-import winSnd from './assets/Sound/win.wav';
-import clickSnd from './assets/Sound/click.wav';
+import spraySnd from './assets/Sound/spray.mp3';
+import mudWashSnd from './assets/Sound/mud_wash.mp3';
+import sparkleSnd from './assets/Sound/sparkle.mp3';
+import winSnd from './assets/Sound/win.mp3';
+import clickSnd from './assets/Sound/click.mp3';
 
 export class GameScene extends Phaser.Scene {
     constructor() {
@@ -96,11 +96,11 @@ export class GameScene extends Phaser.Scene {
 
 
         //const { width, height } = {this.gameWidth,this.gameHeight};
-        this.bg = this.add.image(this.gameWidth / 2 - 10, this.baseBgY, 'bg_stadium');
+        this.bg = this.add.image(this.gameWidth / 2 - 10, this.baseBgY - 150, 'bg_stadium');
         this.bg.setDepth(-1);
         const bgScaleX = this.gameWidth / this.bg.width;
         const bgScaleY = this.gameHeight / this.bg.height;
-        this.bg.setScale(Math.max(bgScaleX, bgScaleY) * 1.65);
+        this.bg.setScale(Math.max(bgScaleX, bgScaleY) * 2.45);
 
         // Set initial wide camera zoom (1.4x wider view)
         this.cameraZoomTween = null;
@@ -350,26 +350,29 @@ export class GameScene extends Phaser.Scene {
         this.topUI = this.add.container(width / 2, Math.max(50, height * 0.08));
         this.topUI.setDepth(30);
 
-        this.titleText = this.add.text(0, -35, 'MAKEOVER ASMR: HOME CLEANUP', {
-            fontFamily: 'Arial, sans-serif',
-            fontSize: '18px',
-            fontStyle: 'bold',
-            color: '#ffffff',
-            stroke: '#000000',
-            strokeThickness: 4,
-            align: 'center'
-        }).setOrigin(0.5);
-        this.topUI.add(this.titleText);
+        // this.titleText = this.add.text(0, -35, 'MAKEOVER ASMR: HOME CLEANUP', {
+        //     fontFamily: 'Arial, sans-serif',
+        //     fontSize: '18px',
+        //     fontStyle: 'bold',
+        //     color: '#ffffff',
+        //     stroke: '#000000',
+        //     strokeThickness: 4,
+        //     align: 'center'
+        // }).setOrigin(0.5);
+        // this.topUI.add(this.titleText);
 
         this.progressBarBg = this.add.image(0, 5, 'progress_bg');
-        this.progressBarBg.setDisplaySize(240, 36);
+        this.progressBarBg.setDisplaySize(240, 8);
         this.topUI.add(this.progressBarBg);
 
         this.progressBarFill = this.add.image(-120, 5, 'progress_fill');
         this.progressBarFill.setOrigin(0, 0.5);
-        this.progressBarFill.setDisplaySize(0, 36);
+        this.progressBarFill.setDisplaySize(240, 8);
         this.maxFillWidth = 240;
         this.topUI.add(this.progressBarFill);
+
+        this.setFillAmount(0);
+
 
         this.percentText = this.add.text(0, 5, '0%', {
             fontFamily: 'Arial, sans-serif',
@@ -381,7 +384,7 @@ export class GameScene extends Phaser.Scene {
         }).setOrigin(0.5);
         this.topUI.add(this.percentText);
 
-        this.promptText = this.add.text(0, 35, 'Wash the Trophy!', {
+        this.promptText = this.add.text(0, 35, '', {
             fontFamily: 'Arial, sans-serif',
             fontSize: '16px',
             fontStyle: 'bold',
@@ -454,7 +457,7 @@ export class GameScene extends Phaser.Scene {
         this.tutorialContainer.setDepth(28);
 
         this.tutorialHand = this.add.image(0, 0, 'hand');
-        this.tutorialHand.setScale(0.85);
+        this.tutorialHand.setScale(0.55);
         this.tutorialContainer.add(this.tutorialHand);
 
         this.tutorialTween = this.tweens.add({
@@ -714,7 +717,7 @@ export class GameScene extends Phaser.Scene {
                 this.sparkleEmitter.explode(4);
             }
 
-            if (this.progress >= 95 && !this.isGameEnd) {
+            if (this.progress >= 99 && !this.isGameEnd) {
                 this.triggerWin();
                 this.createConfetti();
             }
@@ -722,9 +725,36 @@ export class GameScene extends Phaser.Scene {
     }
 
     updateProgressBar() {
-        const fillW = Math.max(1, (this.progress / 100) * this.maxFillWidth);
-        this.progressBarFill.setDisplaySize(fillW, 36);
+        //const fillW = Math.max(1, (this.progress / 100) * this.maxFillWidth);
+        //this.progressBarFill.setDisplaySize(fillW, 36);
+        const fillW = this.progress / 100;
+
+        this.setFillAmount(fillW);
         this.percentText.setText(`${this.progress}%`);
+    }
+
+    setFillAmount(amount) {
+
+        amount = Phaser.Math.Clamp(
+            amount,
+            0,
+            1
+        );
+
+        const sourceWidth =
+            this.progressBarFill.width;
+
+        const sourceHeight =
+            this.progressBarFill.height;
+
+
+        // Crop từ trái sang phải
+        this.progressBarFill.setCrop(
+            0,
+            0,
+            sourceWidth * amount,
+            sourceHeight
+        );
     }
 
 
