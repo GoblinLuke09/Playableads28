@@ -328,7 +328,7 @@ export class GameScene extends Phaser.Scene {
     setupWaterGun() {
         const width = this.gameWidth;
         const height = this.gameHeight;
-        this.gunContainer = this.add.container(width * 0.72, height * 0.78);
+        this.gunContainer = this.add.container(width * 0.5, height * 0.9);
         this.gunContainer.setDepth(25);
 
         const gunScale = 0.68;
@@ -340,7 +340,7 @@ export class GameScene extends Phaser.Scene {
         // Distance from pivot (0.95) to nozzle tip (0.05)
         this.gunTipOffset = 400 * 0.90 * gunScale; // ~245px
 
-        const initAngle = Phaser.Math.DegToRad(-58);
+        const initAngle = Phaser.Math.DegToRad(-90);
         this.gunContainer.setRotation(initAngle + Math.PI / 2);
     }
 
