@@ -4,7 +4,7 @@ import Phaser from 'phaser';
 import bgImg from './assets/Texture/bg_stadium.webp';
 import trophyCleanImg from './assets/Texture/trophy_clean.webp';
 import trophyWetImg from './assets/Texture/trophy_wet.webp';
-import trophyDirtyImg from './assets/Texture/trophy_dirty.webp';
+import trophyDirtyImg from './assets/Texture/trophy_dirty.webp';  
 import trophyShadowImg from './assets/Texture/shadow.webp';
 import mudSplatterImg from './assets/Texture/mud_splatter.webp';
 import sparkleImg from './assets/Texture/sparkle.webp';
@@ -720,6 +720,10 @@ export class GameScene extends Phaser.Scene {
             if (this.progress >= 99 && !this.isGameEnd) {
                 this.triggerWin();
                 this.createConfetti();
+                
+                if (typeof window.gameEnd === 'function') {
+                    window.gameEnd();
+                }
             }
         }
     }

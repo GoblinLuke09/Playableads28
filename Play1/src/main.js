@@ -1,12 +1,6 @@
 import Phaser from 'phaser';
 
-// BƯỚC QUAN TRỌNG: Gán Phaser vào biến toàn cục window
-// Điều này giúp Plugin Spine tìm thấy thư viện Phaser để tự đăng ký
-window.Phaser = Phaser; 
-
 import { GameScene } from './GameScene.js';
-// Nạp Plugin Spine SAU KHI đã gán window.Phaser
-import { SpinePlugin } from '@esotericsoftware/spine-phaser-v4';
 
 const baseWidth = 450;
 const baseHeight = 800;

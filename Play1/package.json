@@ -13,7 +13,6 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "@esotericsoftware/spine-phaser-v4": "^4.2.114",
     "phaser": "^4.1.0"
   },
   "devDependencies": {
