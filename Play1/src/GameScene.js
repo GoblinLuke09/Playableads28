@@ -69,6 +69,7 @@ export class GameScene extends Phaser.Scene {
         this.gameHeight = 800;
         this.isGameEnd = false;
         this.isSpraying = false;
+        this.hasStartedInteracting = false; // Chỉ bắt đầu đếm nhấp nháy sau khi người chơi chạm vào dụng cụ lần đầu
         this.isAudioPlaying = false; // Biến kiểm tra âm thanh phun nước đang phát hay chưa
         this.progress = 0;
         this.cleanedPointsCount = 0;
@@ -78,6 +79,12 @@ export class GameScene extends Phaser.Scene {
 
         this.targetShiftY = 0;
         this.currentShiftY = 0;
+        this.targetShiftX = 0;
+        this.currentShiftX = 0;
+        this.targetBgShiftX = 0;
+        this.currentBgShiftX = 0;
+        this.baseTrophyX = this.gameWidth / 2;
+        this.baseBgX = this.gameWidth / 2 - 10;
         this.baseTrophyY = this.gameHeight * 0.48;
         this.baseBgY = this.gameHeight * 0.35;
 
@@ -150,7 +157,8 @@ export class GameScene extends Phaser.Scene {
         const width = this.gameWidth;
         const height = this.gameHeight;
 
-        this.trophyX = width / 2;
+        this.baseTrophyX = width / 2;
+        this.trophyX = this.baseTrophyX + this.currentShiftX;
         this.baseTrophyY = height * 0.38;
         this.trophyY = this.baseTrophyY;
 
@@ -202,6 +210,17 @@ export class GameScene extends Phaser.Scene {
         this.trophyMud = this.add.image(this.trophyX, this.trophyY, 'mud_canvas_tex');
         this.trophyMud.setDepth(10);
         this.trophyMud.setDisplaySize(this.trophyDisplayW, this.trophyDisplayH);
+
+        // Yellow pulsating hint for unwashed dirty areas (Depth 11)
+        this.trophyMudHint = this.add.image(this.trophyX, this.trophyY, 'mud_canvas_tex');
+        this.trophyMudHint.setDepth(11);
+        this.trophyMudHint.setDisplaySize(this.trophyDisplayW, this.trophyDisplayH);
+        this.trophyMudHint.setTint(0xffea00);
+        this.trophyMudHint.setBlendMode('ADD');
+        this.trophyMudHint.setAlpha(0);
+
+        this.dirtyHintTween = null;
+        this.hintTimer = null;
 
         // Sample points grid to accurately track cleaning percentage
         this.initProgressGrid();
@@ -422,10 +441,13 @@ export class GameScene extends Phaser.Scene {
             this.trophyClean,
             this.trophyWet,
             this.trophyMud,
+            this.trophyMudHint,
             this.trophyGlow,
             this.trophyShadow,
             this.waterGraphics,
             this.waterStreamEmitter,
+            this.waterDropsEmitter,
+            this.waterCoreEmitter,
             this.waterEmitter,
             this.waterMistEmitter,
             this.mudEmitter,
@@ -486,6 +508,32 @@ export class GameScene extends Phaser.Scene {
         if (this.tutorialTween) this.tutorialTween.resume();
     }
 
+    startDirtyHint() {
+        if (!this.hasStartedInteracting || this.isGameEnd || !this.trophyMudHint) return;
+        if (this.dirtyHintTween) {
+            this.dirtyHintTween.stop();
+        }
+        this.trophyMudHint.setAlpha(0);
+        this.dirtyHintTween = this.tweens.add({
+            targets: this.trophyMudHint,
+            alpha: 0.65,
+            duration: 650,
+            yoyo: true,
+            repeat: -1,
+            ease: 'Sine.easeInOut'
+        });
+    }
+
+    stopDirtyHint() {
+        if (this.dirtyHintTween) {
+            this.dirtyHintTween.stop();
+            this.dirtyHintTween = null;
+        }
+        if (this.trophyMudHint) {
+            this.trophyMudHint.setAlpha(0);
+        }
+    }
+
     startSpraySound() {
         if (this.sound.context && this.sound.context.state === 'suspended') {
             this.sound.context.resume();
@@ -512,8 +560,11 @@ export class GameScene extends Phaser.Scene {
             if (this.isGameEnd) {
                 return;
             }
+            this.hasStartedInteracting = true; // Người chơi đã bắt đầu dùng dụng cụ lần đầu
             this.hideTutorial();
+            this.stopDirtyHint();
             if (this.tutorialTimer) this.tutorialTimer.remove();
+            if (this.hintTimer) this.hintTimer.remove();
 
             this.isSpraying = true;
             this.startSpraySound();
@@ -547,16 +598,24 @@ export class GameScene extends Phaser.Scene {
                 this.setCameraZoomSmooth(1 / 1.4, 700);
             }
 
+            this.targetShiftX = 0;
+            this.targetBgShiftX = 0;
+
             this.waterGraphics.clear();
             this.waterStreamEmitter.stop();
+            if (this.waterDropsEmitter) this.waterDropsEmitter.stop();
+            if (this.waterCoreEmitter) this.waterCoreEmitter.stop();
             this.waterEmitter.stop();
             this.waterMistEmitter.stop();
             this.mudEmitter.stop();
             if (this.sprayDomeGlow) this.sprayDomeGlow.setVisible(false);
 
             if (!this.isGameEnd) {
-                this.tutorialTimer = this.time.delayedCall(2500, () => {
+                this.tutorialTimer = this.time.delayedCall(2000, () => {
                     this.showTutorial();
+                });
+                this.hintTimer = this.time.delayedCall(800, () => {
+                    this.startDirtyHint();
                 });
             }
         });
@@ -575,6 +634,27 @@ export class GameScene extends Phaser.Scene {
         const centerX = this.gameWidth / 2;
         const offsetFromCenter = (gunBaseX - centerX) / (centerX * 1.1); // -1 (left) to +1 (right)
         const clampedOffset = Phaser.Math.Clamp(offsetFromCenter, -1, 1);
+
+        // Vị trí chính giữa làm neo (Anchor): chỉ khi đưa hẳn sang 2 bên (vượt qua deadzone) mới dịch chuyển
+        const deadZone = 35; // Vùng neo giữ cố định ở trung tâm (px)
+        const diffX = gunBaseX - centerX;
+        const MAX_SHIFT_X = 20; // Giới hạn dịch chuyển đồng bộ cho đồ vật, shadow và background (px)
+
+        if (Math.abs(diffX) > deadZone) {
+            const availableRange = centerX - deadZone;
+            const sign = Math.sign(diffX);
+            const rawRatio = (Math.abs(diffX) - deadZone) / (availableRange * 0.9);
+            const clampedRatio = Phaser.Math.Clamp(rawRatio, 0, 1);
+            
+            // Đường cong mượt để tăng dần độ dịch khi đẩy xa ra 2 biên
+            const smoothRatio = Math.pow(clampedRatio, 1.4);
+
+            // Đồng bộ dịch chuyển cho toàn bộ đối tượng
+            this.targetShiftX = -sign * smoothRatio * MAX_SHIFT_X;
+        } else {
+            // Nằm trong vùng neo chính giữa -> giữ nguyên vị trí gốc
+            this.targetShiftX = 0;
+        }
         
         // Smooth gentle tilt (up to +/- 18 degrees) without jitter
         const angleDeg = -90 + clampedOffset * 18;
@@ -765,19 +845,25 @@ export class GameScene extends Phaser.Scene {
     triggerWin() {
         this.isGameEnd = true;
         this.isSpraying = false;
+        this.targetShiftX = 0;
+        this.targetBgShiftX = 0;
         this.stopSpraySound();
         this.waterGraphics.clear();
         this.waterStreamEmitter.stop();
+        if (this.waterDropsEmitter) this.waterDropsEmitter.stop();
+        if (this.waterCoreEmitter) this.waterCoreEmitter.stop();
         this.waterEmitter.stop();
         this.mudEmitter.stop();
         this.hideTutorial();
+        this.stopDirtyHint();
+        if (this.hintTimer) this.hintTimer.remove();
 
         this.progress = 100;
         this.updateProgressBar();
 
         // Fade out mud layer completely
         this.tweens.add({
-            targets: this.trophyMud,
+            targets: [this.trophyMud, this.trophyMudHint],
             alpha: 0,
             duration: 350
         });
@@ -908,6 +994,27 @@ export class GameScene extends Phaser.Scene {
     }
 
     update(time, delta) {
+        // Đồng bộ tốc độ chuyển động mượt mà cho toàn bộ cúp, bóng (trophyShadow) và background
+        const lerpFactor = 0.06;
+        this.currentShiftX += (this.targetShiftX - this.currentShiftX) * lerpFactor;
+
+        this.trophyX = this.baseTrophyX + this.currentShiftX;
+
+        if (this.bg) {
+            this.bg.x = this.baseBgX + this.currentShiftX;
+        }
+
+        if (this.trophyShadow) {
+            this.trophyShadow.x = this.trophyX;
+        }
+
+        if (this.trophyClean) {
+            this.trophyClean.x = this.trophyX;
+            if (this.trophyWet) this.trophyWet.x = this.trophyX;
+            if (this.trophyMud) this.trophyMud.x = this.trophyX;
+            if (this.trophyMudHint) this.trophyMudHint.x = this.trophyX;
+            if (this.trophyGlow) this.trophyGlow.x = this.trophyX;
+        }
     }
 
     handleResize(gameSize) {
@@ -919,10 +1026,12 @@ export class GameScene extends Phaser.Scene {
             this.uiCamera.setSize(width, height);
         }
 
+        this.baseTrophyX = width / 2;
+        this.baseBgX = width / 2 - 10;
         this.baseTrophyY = height * 0.48;
         this.baseBgY = height / 2;
         this.trophyY = this.baseTrophyY + this.currentShiftY;
-        this.trophyX = width / 2;
+        this.trophyX = this.baseTrophyX + this.currentShiftX;
 
         this.resizeBackground();
 
@@ -937,9 +1046,15 @@ export class GameScene extends Phaser.Scene {
             if (this.trophyWet) {
                 this.trophyWet.setPosition(this.trophyX, this.trophyY).setDisplaySize(this.trophyDisplayW, this.trophyDisplayH);
             }
+            if (this.trophyShadow) {
+                this.trophyShadow.setPosition(this.trophyX, this.trophyY + 145);
+            }
             this.trophyGlow.setPosition(this.trophyX, this.trophyY);
             if (this.trophyMud) {
                 this.trophyMud.setPosition(this.trophyX, this.trophyY).setDisplaySize(this.trophyDisplayW, this.trophyDisplayH);
+            }
+            if (this.trophyMudHint) {
+                this.trophyMudHint.setPosition(this.trophyX, this.trophyY).setDisplaySize(this.trophyDisplayW, this.trophyDisplayH);
             }
         }
 
