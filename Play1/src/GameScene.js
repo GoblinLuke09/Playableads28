@@ -13,6 +13,10 @@ import btnTryNowImg from './assets/Texture/btn_try_now.webp';
 import progressBgImg from './assets/Texture/progress_bg.webp';
 import progressFillImg from './assets/Texture/progress_fill.webp';
 import gunNozzleImg from './assets/Texture/gun_nozzle.webp';
+import gunNozzle1Img from './assets/Texture/gun_nozzle1.webp';
+import waterPipeImg from './assets/Texture/water_pipe.webp';
+import bubbleImg from './assets/Texture/bubble.webp';
+import btnToolImg from './assets/Texture/btn_Tool.png';
 import handImg from './assets/Texture/hand.webp';
 import waterImg from './assets/Texture/water.webp';
 import waterDropsImg from './assets/Texture/water_drops.webp';
@@ -43,6 +47,10 @@ export class GameScene extends Phaser.Scene {
         this.load.image('progress_bg', progressBgImg);
         this.load.image('progress_fill', progressFillImg);
         this.load.image('gun_nozzle', gunNozzleImg);
+        this.load.image('gun_nozzle1', gunNozzle1Img);
+        this.load.image('water_pipe', waterPipeImg);
+        this.load.image('bubble', bubbleImg);
+        this.load.image('btn_tool', btnToolImg);
         this.load.image('hand', handImg);
         this.load.image('water', waterImg);
         this.load.image('water_drops', waterDropsImg);
@@ -71,6 +79,8 @@ export class GameScene extends Phaser.Scene {
         this.isSpraying = false;
         this.hasStartedInteracting = false; // Chỉ bắt đầu đếm nhấp nháy sau khi người chơi chạm vào dụng cụ lần đầu
         this.isAudioPlaying = false; // Biến kiểm tra âm thanh phun nước đang phát hay chưa
+        this.hasSelectedTool = false;
+        this.canClean = false;
         this.progress = 0;
         this.cleanedPointsCount = 0;
         this.lastWashSoundTime = 0;
@@ -119,19 +129,22 @@ export class GameScene extends Phaser.Scene {
         // 3. Water Jet Graphics & Particles
         this.setupEffects();
 
-        // 4. Pressure Washer Gun
+        // 4. Pressure Washer Gun (initially off-screen)
         this.setupWaterGun();
 
         // 5. UI Elements
         this.setupUI();
 
-        // 6. Tutorial Hand
+        // 6. Tutorial Hand (for cleaning)
         this.setupTutorial();
 
-        // 7. Setup Separate UI Camera (fixes UI scale & position independent of world zoom)
+        // 7. Tool Selection UI (Choose tool first before cleaning)
+        this.setupToolSelection();
+
+        // 8. Setup Separate UI Camera (fixes UI scale & position independent of world zoom)
         this.setupCameras();
 
-        // 8. Input listeners
+        // 9. Input listeners
         this.setupInput();
 
         // Resize handler
@@ -331,6 +344,20 @@ export class GameScene extends Phaser.Scene {
         });
         this.mudEmitter.setDepth(18);
 
+        // === BUBBLE PARTICLES — bubbles spreading widely around and floating upwards (Depth 19) ===
+        this.bubbleEmitter = this.add.particles(0, 0, 'bubble', {
+            speed: { min: 100, max: 130 },
+            angle: { min: 0, max: 360 }, // Burst outward in all directions
+            scale: { min: 0.3, max: 0.5 },
+            alpha: { start: 0.9, end: 0 },
+            lifespan: { min: 1000, max: 1800 },
+            gravityY: 0, // Strong upward buoyancy while spreading
+            frequency: 45,
+            quantity: 3,
+            emitting: false
+        });
+        this.bubbleEmitter.setDepth(17);
+
         // Sparkle particles for victory (Depth 20)
         this.sparkleEmitter = this.add.particles(0, 0, 'sparkle', {
             speed: { min: 40, max: 150 },
@@ -347,15 +374,21 @@ export class GameScene extends Phaser.Scene {
     setupWaterGun() {
         const width = this.gameWidth;
         const height = this.gameHeight;
-        this.gunContainer = this.add.container(width * 0.5, height * 0.9);
+        this.gunContainer = this.add.container(width * 0.5, height + 400);
         this.gunContainer.setDepth(25);
+
+        // Water pipe attached to nozzle handle going down
+        this.gunPipe = this.add.image(0, 0, 'water_pipe');
+        this.gunPipe.setOrigin(0.5, 0.04);
+        this.gunPipe.setScale(1.2, 1.0);
+        this.gunPipe.setVisible(false);
 
         const gunScale = 0.68;
         this.gunNozzle = this.add.image(0, 0, 'gun_nozzle');
         this.gunNozzle.setOrigin(0.5, 0.95);
         this.gunNozzle.setScale(gunScale);
 
-        this.gunContainer.add(this.gunNozzle);
+        this.gunContainer.add([this.gunPipe, this.gunNozzle]);
         // Distance from pivot (0.95) to nozzle tip (0.05)
         this.gunTipOffset = 400 * 0.90 * gunScale; // ~245px
 
@@ -369,17 +402,6 @@ export class GameScene extends Phaser.Scene {
         this.topUI = this.add.container(width / 2, Math.max(50, height * 0.08));
         this.topUI.setDepth(30);
 
-        // this.titleText = this.add.text(0, -35, 'MAKEOVER ASMR: HOME CLEANUP', {
-        //     fontFamily: 'Arial, sans-serif',
-        //     fontSize: '18px',
-        //     fontStyle: 'bold',
-        //     color: '#ffffff',
-        //     stroke: '#000000',
-        //     strokeThickness: 4,
-        //     align: 'center'
-        // }).setOrigin(0.5);
-        // this.topUI.add(this.titleText);
-
         this.progressBarBg = this.add.image(0, 5, 'progress_bg');
         this.progressBarBg.setDisplaySize(240, 8);
         this.topUI.add(this.progressBarBg);
@@ -392,7 +414,6 @@ export class GameScene extends Phaser.Scene {
 
         this.setFillAmount(0);
 
-
         this.percentText = this.add.text(0, 5, '0%', {
             fontFamily: 'Arial, sans-serif',
             fontSize: '15px',
@@ -403,24 +424,148 @@ export class GameScene extends Phaser.Scene {
         }).setOrigin(0.5);
         this.topUI.add(this.percentText);
 
-        this.promptText = this.add.text(0, 35, '', {
+        this.promptText = this.add.text(0, 35, 'CHOOSE TOOL', {
             fontFamily: 'Arial, sans-serif',
-            fontSize: '16px',
+            fontSize: '18px',
             fontStyle: 'bold',
             color: '#ffea75',
             stroke: '#000000',
-            strokeThickness: 3
+            strokeThickness: 4
         }).setOrigin(0.5);
         this.topUI.add(this.promptText);
 
         this.tweens.add({
-            targets: this.ctaBtn,
-            scaleX: 0.98,
-            scaleY: 0.98,
+            targets: this.promptText,
+            scaleX: 1.1,
+            scaleY: 1.1,
             yoyo: true,
             repeat: -1,
-            duration: 750,
+            duration: 600,
             ease: 'Sine.easeInOut'
+        });
+    }
+
+    setupToolSelection() {
+        const { width, height } = this.scale;
+
+        this.toolSelectionContainer = this.add.container(0, 0);
+        this.toolSelectionContainer.setDepth(35);
+
+        const leftX = width * 0.28;
+        const leftY = height * 0.82;
+        const rightX = width * 0.72;
+        const rightY = height * 0.82;
+
+        const btnLeft = this.createToolButton(leftX, leftY, 'gun_nozzle');
+        const btnRight = this.createToolButton(rightX, rightY, 'gun_nozzle1');
+
+        this.toolButtons = [btnLeft, btnRight];
+        this.toolSelectionContainer.add([btnLeft, btnRight]);
+
+        // Hand tutorial for tool selection
+        this.toolTutorialHand = this.add.image(leftX + 20, leftY + 30, 'hand');
+        this.toolTutorialHand.setScale(0.5);
+        this.toolTutorialHand.setDepth(36);
+        this.toolSelectionContainer.add(this.toolTutorialHand);
+
+        this.toolHandTween = this.tweens.add({
+            targets: this.toolTutorialHand,
+            x: { from: leftX + 20, to: rightX + 20 },
+            y: { from: leftY + 30, to: rightY + 30 },
+            yoyo: true,
+            repeat: -1,
+            duration: 1200,
+            ease: 'Sine.easeInOut'
+        });
+    }
+
+    createToolButton(x, y, toolKey) {
+        const btnContainer = this.add.container(x, y);
+
+        // Background button frame
+        const bg = this.add.image(0, 0, 'btn_tool');
+        bg.setScale(0.8);
+        btnContainer.add(bg);
+
+        // Tool preview image inside button (only gun_nozzle / gun_nozzle1, no water pipe on UI)
+        const toolImg = this.add.image(0, -5, toolKey);
+        toolImg.setScale(0.2);
+        toolImg.setRotation(Phaser.Math.DegToRad(-25));
+        btnContainer.add(toolImg);
+
+        // Make button interactive
+        bg.setInteractive({ useHandCursor: true });
+        bg.on('pointerdown', (pointer) => {
+            if (pointer && pointer.event) {
+                pointer.event.stopPropagation();
+            }
+            this.selectTool(toolKey, btnContainer);
+        });
+
+        // Breathing pulse animation
+        this.tweens.add({
+            targets: btnContainer,
+            scaleX: 1.08,
+            scaleY: 1.08,
+            yoyo: true,
+            repeat: -1,
+            duration: 700,
+            ease: 'Sine.easeInOut'
+        });
+
+        return btnContainer;
+    }
+
+    selectTool(toolKey, selectedBtn) {
+        if (this.hasSelectedTool) return;
+        this.hasSelectedTool = true;
+
+        this.clickSound.play();
+
+        // Update gun nozzle texture to the chosen tool
+        this.gunNozzle.setTexture(toolKey);
+
+        // Show/hide water pipe based on selected tool
+        if (toolKey === 'gun_nozzle1') {
+            this.gunPipe.setVisible(true);
+        } else {
+            this.gunPipe.setVisible(false);
+        }
+
+        // Disappear tool selection UI with smooth animation
+        if (this.toolSelectionContainer) {
+            this.tweens.add({
+                targets: this.toolSelectionContainer,
+                alpha: 0,
+                scaleX: 0.8,
+                scaleY: 0.8,
+                duration: 250,
+                ease: 'Back.easeIn',
+                onComplete: () => {
+                    if (this.toolSelectionContainer) {
+                        this.toolSelectionContainer.destroy();
+                        this.toolSelectionContainer = null;
+                    }
+                }
+            });
+        }
+
+        // Reset prompt text
+        if (this.promptText) {
+            this.promptText.setText('');
+        }
+
+        // Slide gun up into view from bottom
+        this.gunContainer.setPosition(this.gameWidth * 0.5, this.gameHeight + 400);
+        this.tweens.add({
+            targets: this.gunContainer,
+            y: this.gameHeight * 0.9,
+            duration: 650,
+            ease: 'Back.easeOut',
+            onComplete: () => {
+                this.canClean = true;
+                this.showTutorial();
+            }
         });
     }
 
@@ -432,6 +577,7 @@ export class GameScene extends Phaser.Scene {
 
         // Main Camera ignores UI
         const uiElements = [this.topUI];
+        if (this.toolSelectionContainer) uiElements.push(this.toolSelectionContainer);
         if (this.ctaBtn) uiElements.push(this.ctaBtn);
         this.cameras.main.ignore(uiElements);
 
@@ -450,6 +596,7 @@ export class GameScene extends Phaser.Scene {
             this.waterCoreEmitter,
             this.waterEmitter,
             this.waterMistEmitter,
+            this.bubbleEmitter,
             this.mudEmitter,
             this.sparkleEmitter,
             this.gunContainer,
@@ -472,11 +619,12 @@ export class GameScene extends Phaser.Scene {
     }
 
     setupTutorial() {
-                const width = this.gameWidth;
+        const width = this.gameWidth;
         const height = this.gameHeight;
 
         this.tutorialContainer = this.add.container(width * 0.72, height * 0.78);
         this.tutorialContainer.setDepth(28);
+        this.tutorialContainer.setVisible(false);
 
         this.tutorialHand = this.add.image(0, 0, 'hand');
         this.tutorialHand.setScale(0.55);
@@ -503,13 +651,13 @@ export class GameScene extends Phaser.Scene {
     }
 
     showTutorial() {
-        if (this.isGameEnd || !this.tutorialContainer) return;
+        if (this.isGameEnd || !this.canClean || !this.tutorialContainer) return;
         this.tutorialContainer.setVisible(true);
         if (this.tutorialTween) this.tutorialTween.resume();
     }
 
     startDirtyHint() {
-        if (!this.hasStartedInteracting || this.isGameEnd || !this.trophyMudHint) return;
+        if (!this.hasStartedInteracting || !this.canClean || this.isGameEnd || !this.trophyMudHint) return;
         if (this.dirtyHintTween) {
             this.dirtyHintTween.stop();
         }
@@ -557,7 +705,7 @@ export class GameScene extends Phaser.Scene {
 
     setupInput() {
         this.input.on('pointerdown', (pointer) => {
-            if (this.isGameEnd) {
+            if (this.isGameEnd || !this.canClean) {
                 return;
             }
             this.hasStartedInteracting = true; // Người chơi đã bắt đầu dùng dụng cụ lần đầu
@@ -580,12 +728,13 @@ export class GameScene extends Phaser.Scene {
         });
 
         this.input.on('pointermove', (pointer) => {
-            if (this.isSpraying && !this.isGameEnd) {
+            if (this.isSpraying && !this.isGameEnd && this.canClean) {
                 this.handleSpray(pointer.worldX, pointer.worldY);
             }
         });
 
         this.input.on('pointerup', () => {
+            if (!this.canClean) return;
             this.isSpraying = false;
             this.stopSpraySound();
             this.lastCanvasX = null;
@@ -607,6 +756,7 @@ export class GameScene extends Phaser.Scene {
             if (this.waterCoreEmitter) this.waterCoreEmitter.stop();
             this.waterEmitter.stop();
             this.waterMistEmitter.stop();
+            if (this.bubbleEmitter) this.bubbleEmitter.stop();
             this.mudEmitter.stop();
             if (this.sprayDomeGlow) this.sprayDomeGlow.setVisible(false);
 
@@ -690,6 +840,12 @@ export class GameScene extends Phaser.Scene {
         this.waterMistEmitter.setPosition(hitX, hitY);
         this.waterMistEmitter.setEmitterAngle({ min: 0, max: 360 });
         if (!this.waterMistEmitter.emitting) this.waterMistEmitter.start();
+
+        // Bubble particles floating upwards from spray/impact area
+        if (this.bubbleEmitter) {
+            this.bubbleEmitter.setPosition(hitX, hitY);
+            if (!this.bubbleEmitter.emitting) this.bubbleEmitter.start();
+        }
 
         // Glow at impact
         if (this.sprayDomeGlow) {
@@ -853,6 +1009,7 @@ export class GameScene extends Phaser.Scene {
         if (this.waterDropsEmitter) this.waterDropsEmitter.stop();
         if (this.waterCoreEmitter) this.waterCoreEmitter.stop();
         this.waterEmitter.stop();
+        if (this.bubbleEmitter) this.bubbleEmitter.stop();
         this.mudEmitter.stop();
         this.hideTutorial();
         this.stopDirtyHint();
@@ -1068,6 +1225,17 @@ export class GameScene extends Phaser.Scene {
 
         if (this.tutorialContainer) {
             this.tutorialContainer.setPosition(width / 2, this.trophyY);
+        }
+
+        if (this.toolSelectionContainer && this.toolSelectionContainer.active) {
+            const leftX = width * 0.28;
+            const leftY = height * 0.82;
+            const rightX = width * 0.72;
+            const rightY = height * 0.82;
+            if (this.toolButtons && this.toolButtons[0] && this.toolButtons[1]) {
+                this.toolButtons[0].setPosition(leftX, leftY);
+                this.toolButtons[1].setPosition(rightX, rightY);
+            }
         }
     }
 
