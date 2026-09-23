@@ -22,8 +22,6 @@ import waterImg from './assets/Texture/water.webp';
 import waterDropsImg from './assets/Texture/water_drops.webp';
 
 // Import sounds
-import spraySnd from './assets/Sound/spray.mp3';
-import mudWashSnd from './assets/Sound/mud_wash.mp3';
 import sparkleSnd from './assets/Sound/sparkle.mp3';
 import winSnd from './assets/Sound/win.mp3';
 import clickSnd from './assets/Sound/click.mp3';
@@ -56,8 +54,6 @@ export class GameScene extends Phaser.Scene {
         this.load.image('water_drops', waterDropsImg);
 
         // Load audio
-        this.load.audio('spray', spraySnd);
-        this.load.audio('mud_wash', mudWashSnd);
         this.load.audio('sparkle', sparkleSnd);
         this.load.audio('win', winSnd);
         this.load.audio('click', clickSnd);
@@ -99,10 +95,12 @@ export class GameScene extends Phaser.Scene {
         this.baseBgY = this.gameHeight * 0.35;
 
         // Sound instances
-        this.spraySound = this.sound.add('spray', { loop: true, volume: 0.55 });
         this.sparkleSound = this.sound.add('sparkle', { volume: 0.8 });
         this.winSound = this.sound.add('win', { volume: 0.9 });
         this.clickSound = this.sound.add('click', { volume: 0.8 });
+
+        // Khởi tạo bộ tạo âm thanh xịt nước áp lực cao (Web Audio Synthesis)
+        this.createProceduralWaterSound();
 
 
         const actualWidth = this.scale.width;
@@ -274,9 +272,8 @@ export class GameScene extends Phaser.Scene {
         this.waterGraphics = this.add.graphics();
         this.waterGraphics.setDepth(14);
 
-        // === WATER FUNNEL STREAM PARTICLES (Depth 16) ===
-        // Shoots from nozzle tip expanding outward in a funnel / cone shape
-        this.waterStreamEmitter = this.add.particles(0, 0, 'water', {
+        // === WATER FUNNEL STREAM PARTICLES CHO DỤNG CỤ 1 (gun_nozzle) ===
+        this.waterStreamEmitter_nozzle = this.add.particles(0, 0, 'water', {
             speed: { min: 450, max: 700 },
             angle: { min: -95, max: -85 }, // Wide cone
             scale: { start: 0.05, end: 0.1 }, // Expands into funnel shape
@@ -287,7 +284,38 @@ export class GameScene extends Phaser.Scene {
             quantity: 5,
             emitting: false
         });
-        this.waterStreamEmitter.setDepth(16);
+        this.waterStreamEmitter_nozzle.setDepth(16);
+
+        // === WATER FUNNEL STREAM PARTICLES CHO DỤNG CỤ 2 (gun_nozzle1) ===
+        // Bạn có thể tùy chỉnh các thông số tia nước riêng cho gun_nozzle1 tại đây:
+        this.waterStreamEmitter_nozzle1 = this.add.particles(0, 0, 'water', {
+            speed: { min: 450, max: 700 },
+            angle: { min: -115, max: -65 },
+            scale: { start: 0.05, end: 0.1 },
+            alpha: { start: 0.95, end: 0.15 },
+            lifespan: { min: 220, max: 350 },
+            tint: [0xffffff, 0xe0f7ff, 0xafe5ff, 0x78d4ff],
+            frequency: 1,
+            quantity: 5,
+            emitting: false
+        });
+        this.waterStreamEmitter_nozzle1.setDepth(16);
+
+        // === ĐIỀU CHỈNH VỊ TRÍ THEO CHIỀU Y CỦA TIA NƯỚC CHO TỪNG DỤNG CỤ (pixel) ===
+        // Giá trị âm: dời tia nước lên trên
+        // Giá trị dương: dời tia nước xuống dưới
+        this.streamOffsetY_nozzle = 0;    // Dành cho gun_nozzle
+        this.streamOffsetY_nozzle1 = 50;   // Dành cho gun_nozzle1 (chỉnh tùy ý tại đây)
+
+        // === ĐIỀU CHỈNH BÁN KÍNH LÀM SẠCH (CLEAN RADIUS) CHO TỪNG DỤNG CỤ (pixel) ===
+        // Giá trị càng lớn thì diện tích làm sạch mỗi lần xịt càng rộng
+        this.cleanRadius_nozzle = 45;     // Dành cho gun_nozzle (mặc định 45px)
+        this.cleanRadius_nozzle1 = 55;    // Dành cho gun_nozzle1 (chỉnh tùy ý tại đây, vd: 60px hoặc 35px)
+
+        // Con trỏ trỏ tới emitter, offset Y và bán kính làm sạch của dụng cụ đang dùng
+        this.waterStreamEmitter = this.waterStreamEmitter_nozzle;
+        this.currentStreamOffsetY = this.streamOffsetY_nozzle;
+        this.currentCleanRadius = this.cleanRadius_nozzle;
 
         // === WATER IMPACT — drops bursting at hit target (Depth 18) ===
         this.waterEmitter = this.add.particles(0, 0, 'water', {
@@ -374,7 +402,7 @@ export class GameScene extends Phaser.Scene {
     setupWaterGun() {
         const width = this.gameWidth;
         const height = this.gameHeight;
-        this.gunContainer = this.add.container(width * 0.5, height + 400);
+        this.gunContainer = this.add.container(width * 0.5, height + 500);
         this.gunContainer.setDepth(25);
 
         // Water pipe attached to nozzle handle going down
@@ -463,19 +491,49 @@ export class GameScene extends Phaser.Scene {
         this.toolSelectionContainer.add([btnLeft, btnRight]);
 
         // Hand tutorial for tool selection
-        this.toolTutorialHand = this.add.image(leftX + 20, leftY + 30, 'hand');
+        this.toolTutorialHand = this.add.image(leftX + 15, leftY + 25, 'hand');
         this.toolTutorialHand.setScale(0.5);
         this.toolTutorialHand.setDepth(36);
         this.toolSelectionContainer.add(this.toolTutorialHand);
 
-        this.toolHandTween = this.tweens.add({
+        // Chuỗi animation: nhấp nháy/tap tại nút trái -> lướt sang phải -> nhấp nháy/tap tại nút phải -> lướt về trái
+        this.toolHandTween = this.tweens.chain({
             targets: this.toolTutorialHand,
-            x: { from: leftX + 20, to: rightX + 20 },
-            y: { from: leftY + 30, to: rightY + 30 },
-            yoyo: true,
-            repeat: -1,
-            duration: 1200,
-            ease: 'Sine.easeInOut'
+            loop: -1,
+            tweens: [
+                // 1. Nhấp nhấp tại nút bên trái (tap 2 lần)
+                {
+                    scaleX: 0.40,
+                    scaleY: 0.40,
+                    duration: 180,
+                    yoyo: true,
+                    repeat: 1,
+                    ease: 'Sine.easeInOut'
+                },
+                // 2. Di chuyển từ nút trái sang nút phải
+                {
+                    x: rightX + 15,
+                    y: rightY + 25,
+                    duration: 750,
+                    ease: 'Sine.easeInOut'
+                },
+                // 3. Nhấp nhấp tại nút bên phải (tap 2 lần)
+                {
+                    scaleX: 0.40,
+                    scaleY: 0.40,
+                    duration: 180,
+                    yoyo: true,
+                    repeat: 1,
+                    ease: 'Sine.easeInOut'
+                },
+                // 4. Di chuyển từ nút phải về lại nút trái
+                {
+                    x: leftX + 15,
+                    y: leftY + 25,
+                    duration: 750,
+                    ease: 'Sine.easeInOut'
+                }
+            ]
         });
     }
 
@@ -525,10 +583,18 @@ export class GameScene extends Phaser.Scene {
         // Update gun nozzle texture to the chosen tool
         this.gunNozzle.setTexture(toolKey);
 
-        // Show/hide water pipe based on selected tool
+        this.toolKey = toolKey;
+
+        // Gán waterStreamEmitter, streamOffsetY và cleanRadius tương ứng với dụng cụ được chọn
         if (toolKey === 'gun_nozzle1') {
+            this.waterStreamEmitter = this.waterStreamEmitter_nozzle1;
+            this.currentStreamOffsetY = this.streamOffsetY_nozzle1;
+            this.currentCleanRadius = this.cleanRadius_nozzle1;
             this.gunPipe.setVisible(true);
         } else {
+            this.waterStreamEmitter = this.waterStreamEmitter_nozzle;
+            this.currentStreamOffsetY = this.streamOffsetY_nozzle;
+            this.currentCleanRadius = this.cleanRadius_nozzle;
             this.gunPipe.setVisible(false);
         }
 
@@ -591,7 +657,8 @@ export class GameScene extends Phaser.Scene {
             this.trophyGlow,
             this.trophyShadow,
             this.waterGraphics,
-            this.waterStreamEmitter,
+            this.waterStreamEmitter_nozzle,
+            this.waterStreamEmitter_nozzle1,
             this.waterDropsEmitter,
             this.waterCoreEmitter,
             this.waterEmitter,
@@ -682,24 +749,99 @@ export class GameScene extends Phaser.Scene {
         }
     }
 
+    createProceduralWaterSound() {
+        if (!this.sound.context) return;
+        const ctx = this.sound.context;
+        
+        // Tạo buffer tiếng ồn (Pink / Brown noise) cho âm thanh dòng nước áp lực cao
+        const bufferSize = ctx.sampleRate * 2;
+        const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+        const output = noiseBuffer.getChannelData(0);
+        let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
+        for (let i = 0; i < bufferSize; i++) {
+            const white = Math.random() * 2 - 1;
+            b0 = 0.99886 * b0 + white * 0.0555179;
+            b1 = 0.99332 * b1 + white * 0.0750759;
+            b2 = 0.96900 * b2 + white * 0.1538520;
+            b3 = 0.86650 * b3 + white * 0.3104856;
+            b4 = 0.55000 * b4 + white * 0.5329522;
+            b5 = -0.7616 * b5 - white * 0.0168980;
+            output[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362) * 0.12;
+            b6 = white * 0.115926;
+        }
+        this.proceduralNoiseBuffer = noiseBuffer;
+    }
+
     startSpraySound() {
         if (this.sound.context && this.sound.context.state === 'suspended') {
             this.sound.context.resume();
         }
         if (!this.isAudioPlaying) {
-            if (this.spraySound && !this.spraySound.isPlaying) {
-                this.spraySound.play();
-            }
             this.isAudioPlaying = true;
+
+            // 2. Tạo âm thanh dòng nước áp lực cao (Web Audio Synthesis)
+            try {
+                const ctx = this.sound.context;
+                if (ctx) {
+                    if (!this.proceduralNoiseBuffer) {
+                        this.createProceduralWaterSound();
+                    }
+                    if (this.proceduralNoiseBuffer) {
+                        this.proceduralSource = ctx.createBufferSource();
+                        this.proceduralSource.buffer = this.proceduralNoiseBuffer;
+                        this.proceduralSource.loop = true;
+
+                        // Bandpass filter tạo tiếng xịt nước rít và sôi động (1.6kHz)
+                        this.proceduralFilter = ctx.createBiquadFilter();
+                        this.proceduralFilter.type = 'bandpass';
+                        this.proceduralFilter.frequency.value = 1600;
+                        this.proceduralFilter.Q.value = 1.6;
+
+                        // Lowpass filter tạo tiếng ầm ầm của tia nước áp lực
+                        this.proceduralFilter2 = ctx.createBiquadFilter();
+                        this.proceduralFilter2.type = 'lowpass';
+                        this.proceduralFilter2.frequency.value = 3400;
+
+                        this.proceduralGain = ctx.createGain();
+                        const now = ctx.currentTime;
+                        this.proceduralGain.gain.setValueAtTime(0, now);
+                        this.proceduralGain.gain.linearRampToValueAtTime(0.5, now + 0.06);
+
+                        this.proceduralSource.connect(this.proceduralFilter);
+                        this.proceduralFilter.connect(this.proceduralFilter2);
+                        this.proceduralFilter2.connect(this.proceduralGain);
+                        this.proceduralGain.connect(ctx.destination);
+
+                        this.proceduralSource.start();
+                    }
+                }
+            } catch (e) {
+                // Fallback nếu Web Audio bị hạn chế
+            }
         }
     }
 
     stopSpraySound() {
         if (this.isAudioPlaying) {
-            if (this.spraySound && this.spraySound.isPlaying) {
-                this.spraySound.stop();
-            }
             this.isAudioPlaying = false;
+
+            try {
+                if (this.proceduralGain && this.sound.context) {
+                    const ctx = this.sound.context;
+                    const now = ctx.currentTime;
+                    this.proceduralGain.gain.setValueAtTime(this.proceduralGain.gain.value, now);
+                    this.proceduralGain.gain.linearRampToValueAtTime(0, now + 0.08);
+                    const src = this.proceduralSource;
+                    setTimeout(() => {
+                        try {
+                            if (src) {
+                                src.stop();
+                                src.disconnect();
+                            }
+                        } catch (err) {}
+                    }, 100);
+                }
+            } catch (e) {}
         }
     }
 
@@ -827,8 +969,8 @@ export class GameScene extends Phaser.Scene {
         // Stream particles: shoot from nozzle tip expanding outwards like a funnel
         const angleDeg2 = Phaser.Math.RadToDeg(angle);
 
-        // Expanding funnel stream
-        this.waterStreamEmitter.setPosition(tipX, tipY);
+        // Expanding funnel stream (áp dụng streamOffsetY)
+        this.waterStreamEmitter.setPosition(tipX, tipY + (this.currentStreamOffsetY || 0));
         this.waterStreamEmitter.setEmitterAngle({ min: angleDeg2 - 18, max: angleDeg2 + 18 });
         if (!this.waterStreamEmitter.emitting) this.waterStreamEmitter.start();
 
@@ -865,7 +1007,8 @@ export class GameScene extends Phaser.Scene {
         const curU = (hitX - trophyLeft) / this.trophyDisplayW;
         const curV = (hitY - trophyTop) / this.trophyDisplayH;
 
-        const eraseCanvasRadius = 45 * (this.dirtyCanvasW / this.trophyDisplayW);
+        const cleanRadius = this.currentCleanRadius || 45;
+        const eraseCanvasRadius = cleanRadius * (this.dirtyCanvasW / this.trophyDisplayW);
 
         // Check if water impact is in or near trophy bounds
         if (hitX >= trophyLeft - 30 && hitX <= trophyLeft + this.trophyDisplayW + 30 &&
@@ -911,7 +1054,8 @@ export class GameScene extends Phaser.Scene {
     }
 
     checkProgressUV(targetU, targetV) {
-        const radiusU = 0.16; // UV radius coverage
+        const cleanRadius = this.currentCleanRadius || 45;
+        const radiusU = (cleanRadius / 45) * 0.16; // Tự động đồng bộ theo cleanRadius của từng dụng cụ
         const aspect = this.trophyDisplayH / this.trophyDisplayW;
         let newlyCleaned = 0;
 
