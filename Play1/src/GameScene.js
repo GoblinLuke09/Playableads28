@@ -75,7 +75,7 @@ export class GameScene extends Phaser.Scene {
         this.isSpraying = false;
         this.hasStartedInteracting = false; // Chỉ bắt đầu đếm nhấp nháy sau khi người chơi chạm vào dụng cụ lần đầu
         this.isAudioPlaying = false; // Biến kiểm tra âm thanh phun nước đang phát hay chưa
-        this.hasSelectedTool = false;
+        this.hasConnectedPipe = false;
         this.canClean = false;
         this.progress = 0;
         this.cleanedPointsCount = 0;
@@ -136,8 +136,8 @@ export class GameScene extends Phaser.Scene {
         // 6. Tutorial Hand (for cleaning)
         this.setupTutorial();
 
-        // 7. Tool Selection UI (Choose tool first before cleaning)
-        this.setupToolSelection();
+        // 7. Pipe Connection Mini-Puzzle
+        this.setupPipePuzzle();
 
         // 8. Setup Separate UI Camera (fixes UI scale & position independent of world zoom)
         this.setupCameras();
@@ -402,26 +402,35 @@ export class GameScene extends Phaser.Scene {
     setupWaterGun() {
         const width = this.gameWidth;
         const height = this.gameHeight;
+        
+        // Súng cao áp gun_nozzle1 ban đầu nằm ẩn dưới màn hình
         this.gunContainer = this.add.container(width * 0.5, height + 500);
         this.gunContainer.setDepth(25);
 
-        // Water pipe attached to nozzle handle going down
+        // 1. Water pipe gắn dưới chuôi súng
         this.gunPipe = this.add.image(0, 0, 'water_pipe');
         this.gunPipe.setOrigin(0.5, 0.04);
         this.gunPipe.setScale(1.2, 1.0);
-        this.gunPipe.setVisible(false);
+        this.gunPipe.setVisible(true);
 
         const gunScale = 0.68;
-        this.gunNozzle = this.add.image(0, 0, 'gun_nozzle');
+        // 2. Súng cao áp sử dụng gun_nozzle1
+        this.gunNozzle = this.add.image(0, 0, 'gun_nozzle1');
         this.gunNozzle.setOrigin(0.5, 0.95);
         this.gunNozzle.setScale(gunScale);
 
         this.gunContainer.add([this.gunPipe, this.gunNozzle]);
-        // Distance from pivot (0.95) to nozzle tip (0.05)
-        this.gunTipOffset = 400 * 0.90 * gunScale; // ~245px
+        
+        // Khoảng cách từ chuôi (0.95) đến đầu vòi xịt
+        this.gunTipOffset = 400 * 0.90 * gunScale;
 
         const initAngle = Phaser.Math.DegToRad(-90);
         this.gunContainer.setRotation(initAngle + Math.PI / 2);
+
+        // Đặt emitter và bán kính làm sạch phù hợp với gun_nozzle1
+        this.waterStreamEmitter = this.waterStreamEmitter_nozzle1;
+        this.currentStreamOffsetY = this.streamOffsetY_nozzle1;
+        this.currentCleanRadius = 55;
     }
 
     setupUI() {
@@ -452,7 +461,7 @@ export class GameScene extends Phaser.Scene {
         }).setOrigin(0.5);
         this.topUI.add(this.percentText);
 
-        this.promptText = this.add.text(0, 35, 'CHOOSE TOOL', {
+        this.promptText = this.add.text(0, 35, 'CONNECT PIPE TO WASH!', {
             fontFamily: 'Arial, sans-serif',
             fontSize: '18px',
             fontStyle: 'bold',
@@ -473,165 +482,222 @@ export class GameScene extends Phaser.Scene {
         });
     }
 
-    setupToolSelection() {
+    setupPipePuzzle() {
         const { width, height } = this.scale;
 
-        this.toolSelectionContainer = this.add.container(0, 0);
-        this.toolSelectionContainer.setDepth(35);
+        this.pipePuzzleContainer = this.add.container(width / 2, height * 0.82);
+        this.pipePuzzleContainer.setDepth(35);
 
-        const leftX = width * 0.28;
-        const leftY = height * 0.82;
-        const rightX = width * 0.72;
-        const rightY = height * 0.82;
+        // Khung nền panel viền xanh neon
+        const panelW = 310;
+        const panelH = 135;
+        const bgPanel = this.add.graphics();
+        bgPanel.fillStyle(0x071526, 0.90);
+        bgPanel.fillRoundedRect(-panelW / 2, -panelH / 2, panelW, panelH, 16);
+        bgPanel.lineStyle(3, 0x00d2ff, 0.95);
+        bgPanel.strokeRoundedRect(-panelW / 2, -panelH / 2, panelW, panelH, 16);
+        this.pipePuzzleContainer.add(bgPanel);
 
-        const btnLeft = this.createToolButton(leftX, leftY, 'gun_nozzle');
-        const btnRight = this.createToolButton(rightX, rightY, 'gun_nozzle1');
+        // Header label
+        const titleText = this.add.text(0, -panelH / 2 + 18, '🔧 TAP TO CONNECT PIPE', {
+            fontFamily: 'Arial, sans-serif',
+            fontSize: '14px',
+            fontStyle: 'bold',
+            color: '#00e5ff',
+            stroke: '#000000',
+            strokeThickness: 3
+        }).setOrigin(0.5);
+        this.pipePuzzleContainer.add(titleText);
 
-        this.toolButtons = [btnLeft, btnRight];
-        this.toolSelectionContainer.add([btnLeft, btnRight]);
+        const pipeY = 16;
+        const pipeThickness = 12;
+        const pipeJointLength = 66;
 
-        // Hand tutorial for tool selection
-        this.toolTutorialHand = this.add.image(leftX + 15, leftY + 25, 'hand');
-        this.toolTutorialHand.setScale(0.5);
-        this.toolTutorialHand.setDepth(36);
-        this.toolSelectionContainer.add(this.toolTutorialHand);
+        // 1. Đoạn ống bên trái (Cố định, nguồn nước): dài từ -115 đến -33 (82px)
+        const leftPipeW = 82;
+        this.leftPipe = this.add.image(-115 + leftPipeW / 2, pipeY, 'water_pipe');
+        this.leftPipe.setDisplaySize(pipeThickness, leftPipeW);
+        this.leftPipe.setRotation(Phaser.Math.DegToRad(90)); // Nằm ngang
+        this.pipePuzzleContainer.add(this.leftPipe);
 
-        // Chuỗi animation: nhấp nháy/tap tại nút trái -> lướt sang phải -> nhấp nháy/tap tại nút phải -> lướt về trái
-        this.toolHandTween = this.tweens.chain({
-            targets: this.toolTutorialHand,
-            loop: -1,
-            tweens: [
-                // 1. Nhấp nhấp tại nút bên trái (tap 2 lần)
-                {
-                    scaleX: 0.40,
-                    scaleY: 0.40,
-                    duration: 180,
-                    yoyo: true,
-                    repeat: 1,
-                    ease: 'Sine.easeInOut'
-                },
-                // 2. Di chuyển từ nút trái sang nút phải
-                {
-                    x: rightX + 15,
-                    y: rightY + 25,
-                    duration: 750,
-                    ease: 'Sine.easeInOut'
-                },
-                // 3. Nhấp nhấp tại nút bên phải (tap 2 lần)
-                {
-                    scaleX: 0.40,
-                    scaleY: 0.40,
-                    duration: 180,
-                    yoyo: true,
-                    repeat: 1,
-                    ease: 'Sine.easeInOut'
-                },
-                // 4. Di chuyển từ nút phải về lại nút trái
-                {
-                    x: leftX + 15,
-                    y: leftY + 25,
-                    duration: 750,
-                    ease: 'Sine.easeInOut'
-                }
-            ]
-        });
-    }
+        // Đầu nối socket kim loại bên trái
+        const leftSocket = this.add.graphics();
+        leftSocket.fillStyle(0x00e5ff, 1);
+        leftSocket.fillRect(-35, pipeY - pipeThickness / 2 - 2, 4, pipeThickness + 4);
+        this.pipePuzzleContainer.add(leftSocket);
 
-    createToolButton(x, y, toolKey) {
-        const btnContainer = this.add.container(x, y);
+        // 2. Đoạn ống bên phải (Cố định, dẫn ra súng): dài từ +33 đến +115 (82px)
+        const rightPipeW = 82;
+        this.rightPipe = this.add.image(33 + rightPipeW / 2, pipeY, 'water_pipe');
+        this.rightPipe.setDisplaySize(pipeThickness, rightPipeW);
+        this.rightPipe.setRotation(Phaser.Math.DegToRad(90)); // Nằm ngang
+        this.pipePuzzleContainer.add(this.rightPipe);
 
-        // Background button frame
-        const bg = this.add.image(0, 0, 'btn_tool');
-        bg.setScale(0.8);
-        btnContainer.add(bg);
+        // Đầu nối socket kim loại bên phải
+        const rightSocket = this.add.graphics();
+        rightSocket.fillStyle(0x00e5ff, 1);
+        rightSocket.fillRect(31, pipeY - pipeThickness / 2 - 2, 4, pipeThickness + 4);
+        this.pipePuzzleContainer.add(rightSocket);
 
-        // Tool preview image inside button (only gun_nozzle / gun_nozzle1, no water pipe on UI)
-        const toolImg = this.add.image(0, -5, toolKey);
-        toolImg.setScale(0.2);
-        toolImg.setRotation(Phaser.Math.DegToRad(-25));
-        btnContainer.add(toolImg);
+        // 3. Khớp nối ở giữa (CẦN XOAY) - Ban đầu đứng dọc 0 độ
+        // (Đoạn ống ngang ở giữa HOÀN TOÀN KHÔNG CÓ, tạo khoảng hở rõ ràng giữa 2 socket)
+        this.centerPipeContainer = this.add.container(0, pipeY);
+        this.pipePuzzleContainer.add(this.centerPipeContainer);
 
-        // Make button interactive
-        bg.setInteractive({ useHandCursor: true });
-        bg.on('pointerdown', (pointer) => {
-            if (pointer && pointer.event) {
-                pointer.event.stopPropagation();
-            }
-            this.selectTool(toolKey, btnContainer);
-        });
-
-        // Breathing pulse animation
+        // Vòng sáng hào quang thu hút chú ý
+        const glowCircle = this.add.image(0, 0, 'radial_glow');
+        glowCircle.setScale(0.42);
+        glowCircle.setTint(0x00ffff);
+        glowCircle.setAlpha(0.65);
+        this.centerPipeContainer.add(glowCircle);
         this.tweens.add({
-            targets: btnContainer,
-            scaleX: 1.08,
-            scaleY: 1.08,
+            targets: glowCircle,
+            scaleX: 0.58,
+            scaleY: 0.58,
+            alpha: 0.25,
             yoyo: true,
             repeat: -1,
-            duration: 700,
+            duration: 550
+        });
+
+        // Đoạn ống giữa: dài đúng bằng khoảng hở 66px, ban đầu ĐỨNG DỌC (0 độ)
+        this.centerPipe = this.add.image(0, 0, 'water_pipe');
+        this.centerPipe.setDisplaySize(pipeThickness, pipeJointLength);
+        this.centerPipe.setRotation(Phaser.Math.DegToRad(0)); // Đứng dọc -> Không hề có nét ngang ở giữa!
+        this.centerPipeContainer.add(this.centerPipe);
+
+        // Vùng tương tác chạm cho khớp giữa
+        const hitArea = this.add.rectangle(0, 0, 80, 80, 0x000000, 0.001);
+        hitArea.setInteractive({ useHandCursor: true });
+        this.centerPipeContainer.add(hitArea);
+
+        // Nước nhỏ giọt rò rỉ tại điểm ngắt quãng bên trái (khi chưa nối khớp)
+        this.leakEmitter = this.add.particles(-33, pipeY + 4, 'water', {
+            speedY: { min: 25, max: 80 },
+            speedX: { min: -10, max: 10 },
+            scale: { start: 0.07, end: 0.02 },
+            alpha: { start: 0.85, end: 0 },
+            lifespan: 500,
+            frequency: 180,
+            gravityY: 150,
+            tint: 0x66d9ff
+        });
+        this.pipePuzzleContainer.add(this.leakEmitter);
+
+        // Bàn tay chỉ dẫn nhấp vào khớp nối giữa
+        this.pipeHand = this.add.image(20, pipeY + 28, 'hand');
+        this.pipeHand.setScale(0.48);
+        this.pipePuzzleContainer.add(this.pipeHand);
+
+        this.tweens.add({
+            targets: this.pipeHand,
+            scaleX: 0.40,
+            scaleY: 0.40,
+            y: pipeY + 18,
+            yoyo: true,
+            repeat: -1,
+            duration: 450,
             ease: 'Sine.easeInOut'
         });
 
-        return btnContainer;
+        // Nhấp vào khớp nối để xoay
+        hitArea.on('pointerdown', (pointer) => {
+            if (pointer && pointer.event) pointer.event.stopPropagation();
+            this.connectPipe();
+        });
     }
 
-    selectTool(toolKey, selectedBtn) {
-        if (this.hasSelectedTool) return;
-        this.hasSelectedTool = true;
+    connectPipe() {
+        if (this.hasConnectedPipe) return;
+        this.hasConnectedPipe = true;
 
         this.clickSound.play();
 
-        // Update gun nozzle texture to the chosen tool
-        this.gunNozzle.setTexture(toolKey);
+        // Ẩn bàn tay & ngừng rò rỉ nước
+        if (this.pipeHand) this.pipeHand.setVisible(false);
+        if (this.leakEmitter) this.leakEmitter.stop();
 
-        this.toolKey = toolKey;
+        // Xoay khớp nối giữa 90 độ -> trở thành nằm ngang và nối kín 2 đầu ống
+        this.tweens.add({
+            targets: this.centerPipe,
+            rotation: Phaser.Math.DegToRad(90),
+            duration: 320,
+            ease: 'Back.easeOut',
+            onComplete: () => {
+                this.onPipeConnectedSuccess();
+            }
+        });
+    }
 
-        // Gán waterStreamEmitter, streamOffsetY và cleanRadius tương ứng với dụng cụ được chọn
-        if (toolKey === 'gun_nozzle1') {
-            this.waterStreamEmitter = this.waterStreamEmitter_nozzle1;
-            this.currentStreamOffsetY = this.streamOffsetY_nozzle1;
-            this.currentCleanRadius = this.cleanRadius_nozzle1;
-            this.gunPipe.setVisible(true);
-        } else {
-            this.waterStreamEmitter = this.waterStreamEmitter_nozzle;
-            this.currentStreamOffsetY = this.streamOffsetY_nozzle;
-            this.currentCleanRadius = this.cleanRadius_nozzle;
-            this.gunPipe.setVisible(false);
+    onPipeConnectedSuccess() {
+        this.sparkleSound.play();
+
+        // Hiệu ứng nước chảy cực mạnh phóng qua đường ống từ trái qua phải
+        const waterRushEmitter = this.add.particles(0, 16, 'water', {
+            x: { min: -110, max: 110 },
+            y: 0,
+            speedX: { min: 280, max: 480 },
+            speedY: { min: -8, max: 8 },
+            scale: { start: 0.08, end: 0.02 },
+            alpha: { start: 1, end: 0 },
+            lifespan: 280,
+            quantity: 4,
+            frequency: 15,
+            tint: [0xffffff, 0x88e2ff, 0x00d0ff]
+        });
+        this.pipePuzzleContainer.add(waterRushEmitter);
+
+        // Sparkles lấp lánh khi nối thành công
+        const pSparkle = this.add.particles(0, 16, 'sparkle', {
+            speed: { min: 35, max: 110 },
+            scale: { start: 0.22, end: 0 },
+            lifespan: 500,
+            quantity: 8,
+            blendMode: 'ADD',
+            tint: [0xffffff, 0x70e0ff]
+        });
+        this.pipePuzzleContainer.add(pSparkle);
+        pSparkle.explode(12);
+
+        if (this.promptText) {
+            this.promptText.setText('💦 WATER FLOWING! READY TO WASH!');
+            this.promptText.setColor('#00ffff');
         }
 
-        // Disappear tool selection UI with smooth animation
-        if (this.toolSelectionContainer) {
+        // Sau 450ms, trượt bảng puzzle xuống và trượt súng xịt gun_nozzle1 lên
+        this.time.delayedCall(450, () => {
+            if (this.pipePuzzleContainer) {
+                this.tweens.add({
+                    targets: this.pipePuzzleContainer,
+                    y: this.gameHeight + 250,
+                    alpha: 0,
+                    duration: 380,
+                    ease: 'Back.easeIn',
+                    onComplete: () => {
+                        if (this.pipePuzzleContainer) {
+                            this.pipePuzzleContainer.destroy();
+                            this.pipePuzzleContainer = null;
+                        }
+                    }
+                });
+            }
+
+            // Súng xịt gun_nozzle1 trượt lên vị trí điều khiển
+            this.gunContainer.setPosition(this.gameWidth * 0.5, this.gameHeight + 400);
             this.tweens.add({
-                targets: this.toolSelectionContainer,
-                alpha: 0,
-                scaleX: 0.8,
-                scaleY: 0.8,
-                duration: 250,
-                ease: 'Back.easeIn',
+                targets: this.gunContainer,
+                y: this.gameHeight * 0.9,
+                duration: 650,
+                ease: 'Back.easeOut',
                 onComplete: () => {
-                    if (this.toolSelectionContainer) {
-                        this.toolSelectionContainer.destroy();
-                        this.toolSelectionContainer = null;
+                    this.canClean = true;
+                    this.showTutorial();
+                    if (this.promptText) {
+                        this.promptText.setText('SWIPE TO CLEAN!');
+                        this.promptText.setColor('#ffea75');
                     }
                 }
             });
-        }
-
-        // Reset prompt text
-        if (this.promptText) {
-            this.promptText.setText('');
-        }
-
-        // Slide gun up into view from bottom
-        this.gunContainer.setPosition(this.gameWidth * 0.5, this.gameHeight + 400);
-        this.tweens.add({
-            targets: this.gunContainer,
-            y: this.gameHeight * 0.9,
-            duration: 650,
-            ease: 'Back.easeOut',
-            onComplete: () => {
-                this.canClean = true;
-                this.showTutorial();
-            }
         });
     }
 
@@ -643,9 +709,9 @@ export class GameScene extends Phaser.Scene {
 
         // Main Camera ignores UI
         const uiElements = [this.topUI];
-        if (this.toolSelectionContainer) uiElements.push(this.toolSelectionContainer);
+        if (this.pipePuzzleContainer) uiElements.push(this.pipePuzzleContainer);
         if (this.ctaBtn) uiElements.push(this.ctaBtn);
-        this.cameras.main.ignore(uiElements);
+        this.cameras.main.ignore(uiElements.filter(Boolean));
 
         // UI Camera ignores World objects
         const worldElements = [
@@ -667,6 +733,7 @@ export class GameScene extends Phaser.Scene {
             this.mudEmitter,
             this.sparkleEmitter,
             this.gunContainer,
+            this.leakEmitter,
             this.tutorialContainer
         ];
         if (this.sprayDomeGlow) worldElements.push(this.sprayDomeGlow);
@@ -1371,15 +1438,8 @@ export class GameScene extends Phaser.Scene {
             this.tutorialContainer.setPosition(width / 2, this.trophyY);
         }
 
-        if (this.toolSelectionContainer && this.toolSelectionContainer.active) {
-            const leftX = width * 0.28;
-            const leftY = height * 0.82;
-            const rightX = width * 0.72;
-            const rightY = height * 0.82;
-            if (this.toolButtons && this.toolButtons[0] && this.toolButtons[1]) {
-                this.toolButtons[0].setPosition(leftX, leftY);
-                this.toolButtons[1].setPosition(rightX, rightY);
-            }
+        if (this.pipePuzzleContainer && this.pipePuzzleContainer.active) {
+            this.pipePuzzleContainer.setPosition(width / 2, height * 0.82);
         }
     }
 
