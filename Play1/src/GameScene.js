@@ -13,7 +13,8 @@ import btnTryNowImg from './assets/Texture/btn_try_now.webp';
 import progressBgImg from './assets/Texture/progress_bg.webp';
 import progressFillImg from './assets/Texture/progress_fill.webp';
 import gunNozzleImg from './assets/Texture/gun_nozzle.webp';
-import gunNozzle1Img from './assets/Texture/gun_nozzle1.webp';
+
+import sweatClothImg from './assets/Texture/sweat_cloth.webp';
 import waterPipeImg from './assets/Texture/water_pipe.webp';
 import bubbleImg from './assets/Texture/bubble.webp';
 import btnToolImg from './assets/Texture/btn_Tool.png';
@@ -45,7 +46,7 @@ export class GameScene extends Phaser.Scene {
         this.load.image('progress_bg', progressBgImg);
         this.load.image('progress_fill', progressFillImg);
         this.load.image('gun_nozzle', gunNozzleImg);
-        this.load.image('gun_nozzle1', gunNozzle1Img);
+        this.load.image('sweat_cloth', sweatClothImg);
         this.load.image('water_pipe', waterPipeImg);
         this.load.image('bubble', bubbleImg);
         this.load.image('btn_tool', btnToolImg);
@@ -75,8 +76,10 @@ export class GameScene extends Phaser.Scene {
         this.isSpraying = false;
         this.hasStartedInteracting = false; // Chỉ bắt đầu đếm nhấp nháy sau khi người chơi chạm vào dụng cụ lần đầu
         this.isAudioPlaying = false; // Biến kiểm tra âm thanh phun nước đang phát hay chưa
-        this.hasSelectedTool = false;
-        this.canClean = false;
+        this.isRagMode = true;        // Bắt đầu bằng khăn lau, chưa nâng cấp
+        this.ragUsageTimer = null;    // Timer đếm 2s dùng khăn -> trigger nâng cấp
+        this.hasTriggeredUpgrade = false; // Đã hiện nút nâng cấp chưa
+        this.canClean = true;         // Cho phép tương tác ngay từ đầu (rag mode)
         this.progress = 0;
         this.cleanedPointsCount = 0;
         this.lastWashSoundTime = 0;
@@ -136,14 +139,17 @@ export class GameScene extends Phaser.Scene {
         // 6. Tutorial Hand (for cleaning)
         this.setupTutorial();
 
-        // 7. Tool Selection UI (Choose tool first before cleaning)
-        this.setupToolSelection();
+        // 7. Rag Mode Setup (khăn lau ban đầu)
+        this.setupRagMode();
 
         // 8. Setup Separate UI Camera (fixes UI scale & position independent of world zoom)
         this.setupCameras();
 
         // 9. Input listeners
         this.setupInput();
+
+        // Show tutorial hand immediately
+        this.showTutorial();
 
         // Resize handler
         this.scale.on('resize', this.handleResize, this);
@@ -286,33 +292,13 @@ export class GameScene extends Phaser.Scene {
         });
         this.waterStreamEmitter_nozzle.setDepth(16);
 
-        // === WATER FUNNEL STREAM PARTICLES CHO DỤNG CỤ 2 (gun_nozzle1) ===
-        // Bạn có thể tùy chỉnh các thông số tia nước riêng cho gun_nozzle1 tại đây:
-        this.waterStreamEmitter_nozzle1 = this.add.particles(0, 0, 'water', {
-            speed: { min: 450, max: 700 },
-            angle: { min: -115, max: -65 },
-            scale: { start: 0.05, end: 0.1 },
-            alpha: { start: 0.95, end: 0.15 },
-            lifespan: { min: 220, max: 350 },
-            tint: [0xffffff, 0xe0f7ff, 0xafe5ff, 0x78d4ff],
-            frequency: 1,
-            quantity: 5,
-            emitting: false
-        });
-        this.waterStreamEmitter_nozzle1.setDepth(16);
-
-        // === ĐIỀU CHỈNH VỊ TRÍ THEO CHIỀU Y CỦA TIA NƯỚC CHO TỪNG DỤNG CỤ (pixel) ===
-        // Giá trị âm: dời tia nước lên trên
-        // Giá trị dương: dời tia nước xuống dưới
+        // === ĐIỀU CHỈNH VỊ TRÍ THEO CHIỀU Y CỦA TIA NƯỚC ===
         this.streamOffsetY_nozzle = 0;    // Dành cho gun_nozzle
-        this.streamOffsetY_nozzle1 = 50;   // Dành cho gun_nozzle1 (chỉnh tùy ý tại đây)
 
-        // === ĐIỀU CHỈNH BÁN KÍNH LÀM SẠCH (CLEAN RADIUS) CHO TỪNG DỤNG CỤ (pixel) ===
-        // Giá trị càng lớn thì diện tích làm sạch mỗi lần xịt càng rộng
+        // === BÁN KÍNH LÀM SẠCH CHO GUN_NOZZLE ===
         this.cleanRadius_nozzle = 45;     // Dành cho gun_nozzle (mặc định 45px)
-        this.cleanRadius_nozzle1 = 55;    // Dành cho gun_nozzle1 (chỉnh tùy ý tại đây, vd: 60px hoặc 35px)
 
-        // Con trỏ trỏ tới emitter, offset Y và bán kính làm sạch của dụng cụ đang dùng
+        // Con trỏ active emitter
         this.waterStreamEmitter = this.waterStreamEmitter_nozzle;
         this.currentStreamOffsetY = this.streamOffsetY_nozzle;
         this.currentCleanRadius = this.cleanRadius_nozzle;
@@ -452,7 +438,7 @@ export class GameScene extends Phaser.Scene {
         }).setOrigin(0.5);
         this.topUI.add(this.percentText);
 
-        this.promptText = this.add.text(0, 35, 'CHOOSE TOOL', {
+        this.promptText = this.add.text(0, 35, 'SWIPE TO CLEAN!', {
             fontFamily: 'Arial, sans-serif',
             fontSize: '18px',
             fontStyle: 'bold',
@@ -473,167 +459,193 @@ export class GameScene extends Phaser.Scene {
         });
     }
 
-    setupToolSelection() {
-        const { width, height } = this.scale;
+    setupRagMode() {
+        const width = this.gameWidth;
+        const height = this.gameHeight;
 
-        this.toolSelectionContainer = this.add.container(0, 0);
-        this.toolSelectionContainer.setDepth(35);
+        // === Container khăn lau — dùng hình ảnh sweat_cloth.webp thật ===
+        this.ragContainer = this.add.container(width * 0.5, height * 0.88);
+        this.ragContainer.setDepth(25);
 
-        const leftX = width * 0.28;
-        const leftY = height * 0.82;
-        const rightX = width * 0.72;
-        const rightY = height * 0.82;
+        this.ragImage = this.add.image(0, 0, 'sweat_cloth');
+        this.ragImage.setOrigin(0.5, 0.5);
+        this.ragImage.setScale(0.55);
+        this.ragContainer.add(this.ragImage);
 
-        const btnLeft = this.createToolButton(leftX, leftY, 'gun_nozzle');
-        const btnRight = this.createToolButton(rightX, rightY, 'gun_nozzle1');
+        // Ẩn gun ở dưới màn hình (chưa dùng)
+        this.gunContainer.setPosition(width * 0.5, height + 500);
 
-        this.toolButtons = [btnLeft, btnRight];
-        this.toolSelectionContainer.add([btnLeft, btnRight]);
+        // Prompt text ban đầu
+        if (this.promptText) {
+            this.promptText.setText('SWIPE TO CLEAN!');
+        }
 
-        // Hand tutorial for tool selection
-        this.toolTutorialHand = this.add.image(leftX + 15, leftY + 25, 'hand');
-        this.toolTutorialHand.setScale(0.5);
-        this.toolTutorialHand.setDepth(36);
-        this.toolSelectionContainer.add(this.toolTutorialHand);
-
-        // Chuỗi animation: nhấp nháy/tap tại nút trái -> lướt sang phải -> nhấp nháy/tap tại nút phải -> lướt về trái
-        this.toolHandTween = this.tweens.chain({
-            targets: this.toolTutorialHand,
-            loop: -1,
-            tweens: [
-                // 1. Nhấp nhấp tại nút bên trái (tap 2 lần)
-                {
-                    scaleX: 0.40,
-                    scaleY: 0.40,
-                    duration: 180,
-                    yoyo: true,
-                    repeat: 1,
-                    ease: 'Sine.easeInOut'
-                },
-                // 2. Di chuyển từ nút trái sang nút phải
-                {
-                    x: rightX + 15,
-                    y: rightY + 25,
-                    duration: 750,
-                    ease: 'Sine.easeInOut'
-                },
-                // 3. Nhấp nhấp tại nút bên phải (tap 2 lần)
-                {
-                    scaleX: 0.40,
-                    scaleY: 0.40,
-                    duration: 180,
-                    yoyo: true,
-                    repeat: 1,
-                    ease: 'Sine.easeInOut'
-                },
-                // 4. Di chuyển từ nút phải về lại nút trái
-                {
-                    x: leftX + 15,
-                    y: leftY + 25,
-                    duration: 750,
-                    ease: 'Sine.easeInOut'
-                }
-            ]
-        });
-    }
-
-    createToolButton(x, y, toolKey) {
-        const btnContainer = this.add.container(x, y);
-
-        // Background button frame
-        const bg = this.add.image(0, 0, 'btn_tool');
-        bg.setScale(0.8);
-        btnContainer.add(bg);
-
-        // Tool preview image inside button (only gun_nozzle / gun_nozzle1, no water pipe on UI)
-        const toolImg = this.add.image(0, -5, toolKey);
-        toolImg.setScale(0.2);
-        toolImg.setRotation(Phaser.Math.DegToRad(-25));
-        btnContainer.add(toolImg);
-
-        // Make button interactive
-        bg.setInteractive({ useHandCursor: true });
-        bg.on('pointerdown', (pointer) => {
-            if (pointer && pointer.event) {
-                pointer.event.stopPropagation();
-            }
-            this.selectTool(toolKey, btnContainer);
-        });
-
-        // Breathing pulse animation
+        // Rung nhẹ khăn để gợi ý tương tác
         this.tweens.add({
-            targets: btnContainer,
-            scaleX: 1.08,
-            scaleY: 1.08,
+            targets: this.ragContainer,
+            angle: { from: -5, to: 5 },
             yoyo: true,
             repeat: -1,
-            duration: 700,
+            duration: 500,
             ease: 'Sine.easeInOut'
         });
-
-        return btnContainer;
     }
 
-    selectTool(toolKey, selectedBtn) {
-        if (this.hasSelectedTool) return;
-        this.hasSelectedTool = true;
+    showUpgradeButton() {
+        if (this.hasTriggeredUpgrade) return;
+        this.hasTriggeredUpgrade = true;
+
+        const width = this.gameWidth;
+        const height = this.gameHeight;
+
+        // Bước 1: Rung mạnh khăn
+        this.tweens.add({
+            targets: this.ragContainer,
+            x: this.ragContainer.x - 15,
+            yoyo: true,
+            repeat: 5,
+            duration: 60,
+            ease: 'Linear',
+            onComplete: () => {
+                // Bước 2: Khăn fade out sau khi rung xong
+                if (this.ragContainer) {
+                    this.tweens.add({
+                        targets: this.ragContainer,
+                        alpha: 0,
+                        duration: 250,
+                        ease: 'Sine.easeIn',
+                        onComplete: () => {
+                            if (this.ragContainer) this.ragContainer.setVisible(false);
+
+                            // Bước 3: Sau khi khăn biến mất hoàn toàn -> mới hiện button
+                            this._spawnUpgradeButton(width, height);
+                        }
+                    });
+                }
+            }
+        });
+    }
+
+    _spawnUpgradeButton(width, height) {
+        // Tạo nút upgrade ở giữa màn hình
+        this.upgradeBtn = this.add.container(width * 0.5, height * 0.5);
+        this.upgradeBtn.setDepth(40);
+        this.upgradeBtn.setAlpha(0);
+        this.upgradeBtn.setScale(0.4);
+
+        // Nền nút — hình tròn bắt mắt
+        const btnBg = this.add.graphics();
+        btnBg.fillStyle(0xffd700, 1);
+        btnBg.fillCircle(0, 0, 70);
+        btnBg.lineStyle(5, 0xffffff, 1);
+        btnBg.strokeCircle(0, 0, 70);
+        this.upgradeBtn.add(btnBg);
+
+        // Icon gun_nozzle bên trong
+        const gunIcon = this.add.image(0, -5, 'gun_nozzle');
+        gunIcon.setScale(0.35);
+        gunIcon.setRotation(Phaser.Math.DegToRad(-25));
+        this.upgradeBtn.add(gunIcon);
+
+        // Label "UPGRADE!"
+        const label = this.add.text(0, 55, 'UPGRADE!', {
+            fontFamily: 'Arial, sans-serif',
+            fontSize: '22px',
+            fontStyle: 'bold',
+            color: '#ffffff',
+            stroke: '#000000',
+            strokeThickness: 4
+        }).setOrigin(0.5);
+        this.upgradeBtn.add(label);
+
+        // Pop-in animation
+        this.tweens.add({
+            targets: this.upgradeBtn,
+            alpha: 1,
+            scaleX: 1,
+            scaleY: 1,
+            duration: 400,
+            ease: 'Back.easeOut',
+            onComplete: () => {
+                // Pulse animation sau khi pop-in xong
+                this.tweens.add({
+                    targets: this.upgradeBtn,
+                    scaleX: 1.1,
+                    scaleY: 1.1,
+                    yoyo: true,
+                    repeat: -1,
+                    duration: 500,
+                    ease: 'Sine.easeInOut'
+                });
+            }
+        });
+
+        // Làm interactive
+        btnBg.setInteractive(new Phaser.Geom.Circle(0, 0, 70), Phaser.Geom.Circle.Contains);
+        btnBg.on('pointerdown', (pointer) => {
+            if (pointer && pointer.event) pointer.event.stopPropagation();
+            this.activateGunMode();
+        });
+
+        // Cập nhật prompt
+        if (this.promptText) {
+            this.promptText.setText('TAP TO UPGRADE!');
+        }
+    }
+
+    activateGunMode() {
+        if (!this.upgradeBtn) return;
 
         this.clickSound.play();
 
-        // Update gun nozzle texture to the chosen tool
-        this.gunNozzle.setTexture(toolKey);
-
-        this.toolKey = toolKey;
-
-        // Gán waterStreamEmitter, streamOffsetY và cleanRadius tương ứng với dụng cụ được chọn
-        if (toolKey === 'gun_nozzle1') {
-            this.waterStreamEmitter = this.waterStreamEmitter_nozzle1;
-            this.currentStreamOffsetY = this.streamOffsetY_nozzle1;
-            this.currentCleanRadius = this.cleanRadius_nozzle1;
-            this.gunPipe.setVisible(true);
-        } else {
-            this.waterStreamEmitter = this.waterStreamEmitter_nozzle;
-            this.currentStreamOffsetY = this.streamOffsetY_nozzle;
-            this.currentCleanRadius = this.cleanRadius_nozzle;
-            this.gunPipe.setVisible(false);
-        }
-
-        // Disappear tool selection UI with smooth animation
-        if (this.toolSelectionContainer) {
-            this.tweens.add({
-                targets: this.toolSelectionContainer,
-                alpha: 0,
-                scaleX: 0.8,
-                scaleY: 0.8,
-                duration: 250,
-                ease: 'Back.easeIn',
-                onComplete: () => {
-                    if (this.toolSelectionContainer) {
-                        this.toolSelectionContainer.destroy();
-                        this.toolSelectionContainer = null;
-                    }
+        // Ẩn nút upgrade
+        this.tweens.add({
+            targets: this.upgradeBtn,
+            alpha: 0,
+            scaleX: 0.3,
+            scaleY: 0.3,
+            duration: 250,
+            ease: 'Back.easeIn',
+            onComplete: () => {
+                if (this.upgradeBtn) {
+                    this.upgradeBtn.destroy();
+                    this.upgradeBtn = null;
                 }
-            });
-        }
+            }
+        });
 
-        // Reset prompt text
-        if (this.promptText) {
-            this.promptText.setText('');
-        }
+        // Chuyển sang gun mode
+        this.isRagMode = false;
 
-        // Slide gun up into view from bottom
+        // Súng trượt lên từ dưới
         this.gunContainer.setPosition(this.gameWidth * 0.5, this.gameHeight + 400);
         this.tweens.add({
             targets: this.gunContainer,
             y: this.gameHeight * 0.9,
-            duration: 650,
+            duration: 600,
             ease: 'Back.easeOut',
             onComplete: () => {
-                this.canClean = true;
+                // Reset prompt
+                if (this.promptText) {
+                    this.promptText.setText('SWIPE TO CLEAN!');
+                }
                 this.showTutorial();
             }
         });
+
+        // Flash hiệu ứng lên màn hình
+        const flash = this.add.graphics();
+        flash.fillStyle(0xffffff, 0.6);
+        flash.fillRect(0, 0, this.gameWidth, this.gameHeight);
+        flash.setDepth(50);
+        this.tweens.add({
+            targets: flash,
+            alpha: 0,
+            duration: 300,
+            onComplete: () => flash.destroy()
+        });
     }
+
 
     setupCameras() {
         const { width, height } = this.scale;
@@ -643,7 +655,6 @@ export class GameScene extends Phaser.Scene {
 
         // Main Camera ignores UI
         const uiElements = [this.topUI];
-        if (this.toolSelectionContainer) uiElements.push(this.toolSelectionContainer);
         if (this.ctaBtn) uiElements.push(this.ctaBtn);
         this.cameras.main.ignore(uiElements);
 
@@ -658,7 +669,6 @@ export class GameScene extends Phaser.Scene {
             this.trophyShadow,
             this.waterGraphics,
             this.waterStreamEmitter_nozzle,
-            this.waterStreamEmitter_nozzle1,
             this.waterDropsEmitter,
             this.waterCoreEmitter,
             this.waterEmitter,
@@ -670,6 +680,7 @@ export class GameScene extends Phaser.Scene {
             this.tutorialContainer
         ];
         if (this.sprayDomeGlow) worldElements.push(this.sprayDomeGlow);
+        if (this.ragContainer) worldElements.push(this.ragContainer);
         this.uiCamera.ignore(worldElements.filter(Boolean));
     }
 
@@ -850,17 +861,27 @@ export class GameScene extends Phaser.Scene {
             if (this.isGameEnd || !this.canClean) {
                 return;
             }
-            this.hasStartedInteracting = true; // Người chơi đã bắt đầu dùng dụng cụ lần đầu
+            this.hasStartedInteracting = true;
             this.hideTutorial();
             this.stopDirtyHint();
             if (this.tutorialTimer) this.tutorialTimer.remove();
             if (this.hintTimer) this.hintTimer.remove();
 
             this.isSpraying = true;
-            this.startSpraySound();
 
-            // Smoothly zoom in to 1.2x wider view
-            this.setCameraZoomSmooth(1 / 1.2, 700);
+            if (this.isRagMode) {
+                // Rag mode: không âm thanh xịt, không zoom
+                // Bắt đầu đếm thời gian sử dụng khăn (2s → hiện upgrade)
+                if (!this.ragUsageTimer && !this.hasTriggeredUpgrade) {
+                    this.ragUsageTimer = this.time.delayedCall(2000, () => {
+                        this.showUpgradeButton();
+                    });
+                }
+            } else {
+                // Gun mode: âm thanh + zoom như cũ
+                this.startSpraySound();
+                this.setCameraZoomSmooth(1 / 1.2, 700);
+            }
 
             this.lastCanvasX = null;
             this.lastCanvasY = null;
@@ -878,31 +899,39 @@ export class GameScene extends Phaser.Scene {
         this.input.on('pointerup', () => {
             if (!this.canClean) return;
             this.isSpraying = false;
-            this.stopSpraySound();
+
+            if (this.isRagMode) {
+                // Rag mode: dừng timer khi thả tay (không tích lũy thời gian rời khỏi)
+                // Không dừng timer — cứ để chạy sau 2s từ lần chạm đầu tiên
+            } else {
+                // Gun mode: dừng âm thanh và zoom về
+                this.stopSpraySound();
+                if (!this.isGameEnd) {
+                    this.setCameraZoomSmooth(1 / 1.4, 700);
+                }
+            }
+
             this.lastCanvasX = null;
             this.lastCanvasY = null;
             this.lastU = null;
             this.lastV = null;
 
-            // Smoothly zoom back out to initial 1.4x wider view
-            if (!this.isGameEnd) {
-                this.setCameraZoomSmooth(1 / 1.4, 700);
-            }
-
             this.targetShiftX = 0;
             this.targetBgShiftX = 0;
 
-            this.waterGraphics.clear();
-            this.waterStreamEmitter.stop();
-            if (this.waterDropsEmitter) this.waterDropsEmitter.stop();
-            if (this.waterCoreEmitter) this.waterCoreEmitter.stop();
-            this.waterEmitter.stop();
-            this.waterMistEmitter.stop();
-            if (this.bubbleEmitter) this.bubbleEmitter.stop();
-            this.mudEmitter.stop();
-            if (this.sprayDomeGlow) this.sprayDomeGlow.setVisible(false);
+            if (!this.isRagMode) {
+                this.waterGraphics.clear();
+                this.waterStreamEmitter.stop();
+                if (this.waterDropsEmitter) this.waterDropsEmitter.stop();
+                if (this.waterCoreEmitter) this.waterCoreEmitter.stop();
+                this.waterEmitter.stop();
+                this.waterMistEmitter.stop();
+                if (this.bubbleEmitter) this.bubbleEmitter.stop();
+                this.mudEmitter.stop();
+                if (this.sprayDomeGlow) this.sprayDomeGlow.setVisible(false);
+            }
 
-            if (!this.isGameEnd) {
+            if (!this.isGameEnd && !this.isRagMode) {
                 this.tutorialTimer = this.time.delayedCall(2000, () => {
                     this.showTutorial();
                 });
@@ -916,65 +945,59 @@ export class GameScene extends Phaser.Scene {
     handleSpray(pointerX, pointerY) {
         if (this.isGameEnd) return;
 
-        // Position the tool directly at the player's touch / cursor
+        if (this.isRagMode) {
+            // === RAG MODE: Chỉ di chuyển khăn theo ngón tay, trophy KHÔNG thay đổi gì ===
+            if (this.ragContainer) {
+                this.ragContainer.setPosition(pointerX, pointerY);
+            }
+            return;
+        }
+
+        // === GUN MODE: Toàn bộ hiệu ứng như cũ ===
         const gunBaseX = pointerX;
         const gunBaseY = pointerY + 100;
 
         this.gunContainer.setPosition(gunBaseX, gunBaseY);
 
-        // Center-based smooth tilt: Straight UP (-90 deg) at center, smoothly tilts left/right based on position
         const centerX = this.gameWidth / 2;
-        const offsetFromCenter = (gunBaseX - centerX) / (centerX * 1.1); // -1 (left) to +1 (right)
+        const offsetFromCenter = (gunBaseX - centerX) / (centerX * 1.1);
         const clampedOffset = Phaser.Math.Clamp(offsetFromCenter, -1, 1);
 
-        // Vị trí chính giữa làm neo (Anchor): chỉ khi đưa hẳn sang 2 bên (vượt qua deadzone) mới dịch chuyển
-        const deadZone = 35; // Vùng neo giữ cố định ở trung tâm (px)
+        const deadZone = 35;
         const diffX = gunBaseX - centerX;
-        const MAX_SHIFT_X = 20; // Giới hạn dịch chuyển đồng bộ cho đồ vật, shadow và background (px)
+        const MAX_SHIFT_X = 20;
 
         if (Math.abs(diffX) > deadZone) {
             const availableRange = centerX - deadZone;
             const sign = Math.sign(diffX);
             const rawRatio = (Math.abs(diffX) - deadZone) / (availableRange * 0.9);
             const clampedRatio = Phaser.Math.Clamp(rawRatio, 0, 1);
-            
-            // Đường cong mượt để tăng dần độ dịch khi đẩy xa ra 2 biên
             const smoothRatio = Math.pow(clampedRatio, 1.4);
-
-            // Đồng bộ dịch chuyển cho toàn bộ đối tượng
             this.targetShiftX = -sign * smoothRatio * MAX_SHIFT_X;
         } else {
-            // Nằm trong vùng neo chính giữa -> giữ nguyên vị trí gốc
             this.targetShiftX = 0;
         }
-        
-        // Smooth gentle tilt (up to +/- 18 degrees) without jitter
+
         const angleDeg = -90 + clampedOffset * 18;
         const angle = Phaser.Math.DegToRad(angleDeg);
 
         this.gunContainer.setRotation(angle + Math.PI / 2);
 
-        // Nozzle tip coordinates
         const tipX = gunBaseX + Math.cos(angle) * this.gunTipOffset;
         const tipY = gunBaseY + Math.sin(angle) * this.gunTipOffset;
 
-        // Water jet impact point ahead of the nozzle tip
         const jetLength = 150;
         const hitX = tipX + Math.cos(angle) * jetLength;
         const hitY = tipY + Math.sin(angle) * jetLength;
 
-        // Clear graphics
         this.waterGraphics.clear();
 
-        // Stream particles: shoot from nozzle tip expanding outwards like a funnel
         const angleDeg2 = Phaser.Math.RadToDeg(angle);
 
-        // Expanding funnel stream (áp dụng streamOffsetY)
         this.waterStreamEmitter.setPosition(tipX, tipY + (this.currentStreamOffsetY || 0));
         this.waterStreamEmitter.setEmitterAngle({ min: angleDeg2 - 18, max: angleDeg2 + 18 });
         if (!this.waterStreamEmitter.emitting) this.waterStreamEmitter.start();
 
-        // Impact particles at hit point
         this.waterEmitter.setPosition(hitX, hitY);
         this.waterEmitter.setEmitterAngle({ min: angleDeg2 + 100, max: angleDeg2 + 260 });
         if (!this.waterEmitter.emitting) this.waterEmitter.start();
@@ -983,21 +1006,16 @@ export class GameScene extends Phaser.Scene {
         this.waterMistEmitter.setEmitterAngle({ min: 0, max: 360 });
         if (!this.waterMistEmitter.emitting) this.waterMistEmitter.start();
 
-        // Bubble particles floating upwards from spray/impact area
         if (this.bubbleEmitter) {
             this.bubbleEmitter.setPosition(hitX, hitY);
             if (!this.bubbleEmitter.emitting) this.bubbleEmitter.start();
         }
 
-        // Glow at impact
         if (this.sprayDomeGlow) {
             this.sprayDomeGlow.setPosition(hitX, hitY);
             this.sprayDomeGlow.setVisible(true);
         }
 
-        // Emit water particles at impact point
-
-        // Calculate position relative to trophy
         const trophyLeft = this.trophyX - this.trophyDisplayW / 2;
         const trophyTop = this.trophyY - this.trophyDisplayH / 2;
 
@@ -1010,14 +1028,12 @@ export class GameScene extends Phaser.Scene {
         const cleanRadius = this.currentCleanRadius || 45;
         const eraseCanvasRadius = cleanRadius * (this.dirtyCanvasW / this.trophyDisplayW);
 
-        // Check if water impact is in or near trophy bounds
         if (hitX >= trophyLeft - 30 && hitX <= trophyLeft + this.trophyDisplayW + 30 &&
             hitY >= trophyTop - 30 && hitY <= trophyTop + this.trophyDisplayH + 30) {
-            
+
             this.mudCtx.save();
             this.mudCtx.globalCompositeOperation = 'destination-out';
 
-            // Connect stroke from last position for seamless erasing
             if (this.lastCanvasX !== null && this.lastCanvasY !== null) {
                 this.mudCtx.lineWidth = eraseCanvasRadius * 2;
                 this.mudCtx.lineCap = 'round';
@@ -1028,20 +1044,16 @@ export class GameScene extends Phaser.Scene {
                 this.mudCtx.stroke();
             }
 
-            // Fill circle at current position
             this.mudCtx.beginPath();
             this.mudCtx.arc(curCanvasX, curCanvasY, eraseCanvasRadius, 0, Math.PI * 2);
             this.mudCtx.fill();
             this.mudCtx.restore();
 
-            // Refresh canvas texture to update screen immediately
             this.mudCanvas.refresh();
 
-            // Mud splash particles
             this.mudEmitter.setPosition(hitX, hitY);
             if (!this.mudEmitter.emitting) this.mudEmitter.start();
 
-            // Update cleaned progress across interpolated UV points
             this.checkProgressUV(curU, curV);
         } else {
             this.mudEmitter.stop();
