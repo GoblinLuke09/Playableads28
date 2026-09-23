@@ -76,6 +76,8 @@ export class GameScene extends Phaser.Scene {
         this.hasStartedInteracting = false; // Chỉ bắt đầu đếm nhấp nháy sau khi người chơi chạm vào dụng cụ lần đầu
         this.isAudioPlaying = false; // Biến kiểm tra âm thanh phun nước đang phát hay chưa
         this.hasConnectedPipe = false;
+        this.isGunBroken = true;
+        this.hasFailedAttempt = false;
         this.canClean = false;
         this.progress = 0;
         this.cleanedPointsCount = 0;
@@ -127,7 +129,7 @@ export class GameScene extends Phaser.Scene {
         // 3. Water Jet Graphics & Particles
         this.setupEffects();
 
-        // 4. Pressure Washer Gun (initially off-screen)
+        // 4. Pressure Washer Gun (initially positioned at bottom center)
         this.setupWaterGun();
 
         // 5. UI Elements
@@ -135,11 +137,9 @@ export class GameScene extends Phaser.Scene {
 
         // 6. Tutorial Hand (for cleaning)
         this.setupTutorial();
+        this.showTutorial(); // Hiển thị bàn tay chỉ dẫn vuốt trên cúp bẩn ngay từ đầu
 
-        // 7. Pipe Connection Mini-Puzzle
-        this.setupPipePuzzle();
-
-        // 8. Setup Separate UI Camera (fixes UI scale & position independent of world zoom)
+        // 7. Setup Separate UI Camera
         this.setupCameras();
 
         // 9. Input listeners
@@ -229,6 +229,18 @@ export class GameScene extends Phaser.Scene {
         this.trophyMudHint.setTint(0xffea00);
         this.trophyMudHint.setBlendMode('ADD');
         this.trophyMudHint.setAlpha(0);
+
+        // Hiệu ứng mở màn: Đồ vật bẩn xuất hiện nổi bật trên màn hình
+        [this.trophyClean, this.trophyWet, this.trophyMud, this.trophyMudHint].forEach(img => {
+            img.setScale(0);
+            this.tweens.add({
+                targets: img,
+                scaleX: this.trophyScale * (1040 / 1024),
+                scaleY: this.trophyScale * (1000 / 1024),
+                duration: 550,
+                ease: 'Back.easeOut'
+            });
+        });
 
         this.dirtyHintTween = null;
         this.hintTimer = null;
@@ -403,8 +415,8 @@ export class GameScene extends Phaser.Scene {
         const width = this.gameWidth;
         const height = this.gameHeight;
         
-        // Súng cao áp gun_nozzle1 ban đầu nằm ẩn dưới màn hình
-        this.gunContainer = this.add.container(width * 0.5, height + 500);
+        // Súng cao áp gun_nozzle1 xuất hiện sẵn sàng ở vị trí trung tâm phía dưới
+        this.gunContainer = this.add.container(width * 0.5, height * 0.88);
         this.gunContainer.setDepth(25);
 
         // 1. Water pipe gắn dưới chuôi súng
@@ -461,7 +473,7 @@ export class GameScene extends Phaser.Scene {
         }).setOrigin(0.5);
         this.topUI.add(this.percentText);
 
-        this.promptText = this.add.text(0, 35, 'CONNECT PIPE TO WASH!', {
+        this.promptText = this.add.text(0, 35, 'SWIPE TO CLEAN!', {
             fontFamily: 'Arial, sans-serif',
             fontSize: '18px',
             fontStyle: 'bold',
@@ -482,11 +494,19 @@ export class GameScene extends Phaser.Scene {
         });
     }
 
-    setupPipePuzzle() {
+    showPipePuzzle() {
+        if (this.pipePuzzleContainer) return;
         const { width, height } = this.scale;
 
-        this.pipePuzzleContainer = this.add.container(width / 2, height * 0.82);
+        // Bảng ống nước trượt lên từ dưới màn hình để sửa chữa
+        this.pipePuzzleContainer = this.add.container(width / 2, height + 250);
         this.pipePuzzleContainer.setDepth(35);
+        this.tweens.add({
+            targets: this.pipePuzzleContainer,
+            y: height * 0.82,
+            duration: 500,
+            ease: 'Back.easeOut'
+        });
 
         // Khung nền panel viền xanh neon
         const panelW = 310;
@@ -499,7 +519,7 @@ export class GameScene extends Phaser.Scene {
         this.pipePuzzleContainer.add(bgPanel);
 
         // Header label
-        const titleText = this.add.text(0, -panelH / 2 + 18, '🔧 TAP TO CONNECT PIPE', {
+        const titleText = this.add.text(0, -panelH / 2 + 18, '🔧 TAP TO FIX PIPE', {
             fontFamily: 'Arial, sans-serif',
             fontSize: '14px',
             fontStyle: 'bold',
@@ -540,7 +560,6 @@ export class GameScene extends Phaser.Scene {
         this.pipePuzzleContainer.add(rightSocket);
 
         // 3. Khớp nối ở giữa (CẦN XOAY) - Ban đầu đứng dọc 0 độ
-        // (Đoạn ống ngang ở giữa HOÀN TOÀN KHÔNG CÓ, tạo khoảng hở rõ ràng giữa 2 socket)
         this.centerPipeContainer = this.add.container(0, pipeY);
         this.pipePuzzleContainer.add(this.centerPipeContainer);
 
@@ -563,7 +582,7 @@ export class GameScene extends Phaser.Scene {
         // Đoạn ống giữa: dài đúng bằng khoảng hở 66px, ban đầu ĐỨNG DỌC (0 độ)
         this.centerPipe = this.add.image(0, 0, 'water_pipe');
         this.centerPipe.setDisplaySize(pipeThickness, pipeJointLength);
-        this.centerPipe.setRotation(Phaser.Math.DegToRad(0)); // Đứng dọc -> Không hề có nét ngang ở giữa!
+        this.centerPipe.setRotation(Phaser.Math.DegToRad(0));
         this.centerPipeContainer.add(this.centerPipe);
 
         // Vùng tương tác chạm cho khớp giữa
@@ -605,6 +624,10 @@ export class GameScene extends Phaser.Scene {
             if (pointer && pointer.event) pointer.event.stopPropagation();
             this.connectPipe();
         });
+
+        if (this.uiCamera) {
+            this.cameras.main.ignore(this.pipePuzzleContainer);
+        }
     }
 
     connectPipe() {
@@ -645,7 +668,7 @@ export class GameScene extends Phaser.Scene {
             frequency: 15,
             tint: [0xffffff, 0x88e2ff, 0x00d0ff]
         });
-        this.pipePuzzleContainer.add(waterRushEmitter);
+        if (this.pipePuzzleContainer) this.pipePuzzleContainer.add(waterRushEmitter);
 
         // Sparkles lấp lánh khi nối thành công
         const pSparkle = this.add.particles(0, 16, 'sparkle', {
@@ -656,15 +679,28 @@ export class GameScene extends Phaser.Scene {
             blendMode: 'ADD',
             tint: [0xffffff, 0x70e0ff]
         });
-        this.pipePuzzleContainer.add(pSparkle);
-        pSparkle.explode(12);
+        if (this.pipePuzzleContainer) {
+            this.pipePuzzleContainer.add(pSparkle);
+            pSparkle.explode(12);
+        }
+
+        // Súng nảy nhẹ (Pulse rumble) báo hiệu áp lực nước đã nạp đầy
+        this.tweens.add({
+            targets: this.gunContainer,
+            scaleX: 1.08,
+            scaleY: 1.08,
+            duration: 120,
+            yoyo: true,
+            repeat: 1,
+            ease: 'Sine.easeInOut'
+        });
 
         if (this.promptText) {
             this.promptText.setText('💦 WATER FLOWING! READY TO WASH!');
             this.promptText.setColor('#00ffff');
         }
 
-        // Sau 450ms, trượt bảng puzzle xuống và trượt súng xịt gun_nozzle1 lên
+        // Sau 450ms, trượt bảng puzzle xuống và kích hoạt súng xịt
         this.time.delayedCall(450, () => {
             if (this.pipePuzzleContainer) {
                 this.tweens.add({
@@ -682,22 +718,13 @@ export class GameScene extends Phaser.Scene {
                 });
             }
 
-            // Súng xịt gun_nozzle1 trượt lên vị trí điều khiển
-            this.gunContainer.setPosition(this.gameWidth * 0.5, this.gameHeight + 400);
-            this.tweens.add({
-                targets: this.gunContainer,
-                y: this.gameHeight * 0.9,
-                duration: 650,
-                ease: 'Back.easeOut',
-                onComplete: () => {
-                    this.canClean = true;
-                    this.showTutorial();
-                    if (this.promptText) {
-                        this.promptText.setText('SWIPE TO CLEAN!');
-                        this.promptText.setColor('#ffea75');
-                    }
-                }
-            });
+            this.isGunBroken = false;
+            this.canClean = true;
+            this.showTutorial();
+            if (this.promptText) {
+                this.promptText.setText('SWIPE TO CLEAN!');
+                this.promptText.setColor('#ffea75');
+            }
         });
     }
 
@@ -914,9 +941,48 @@ export class GameScene extends Phaser.Scene {
 
     setupInput() {
         this.input.on('pointerdown', (pointer) => {
-            if (this.isGameEnd || !this.canClean) {
+            if (this.isGameEnd) return;
+
+            // Nếu súng đang bị hỏng (chưa sửa ống nước)
+            if (this.isGunBroken) {
+                if (!this.hasFailedAttempt) {
+                    this.hasFailedAttempt = true;
+                    this.clickSound.play();
+                    this.hideTutorial();
+
+                    // Súng rung nảy/giật giật báo hiệu kẹt nước
+                    this.tweens.add({
+                        targets: this.gunContainer,
+                        x: { from: this.gunContainer.x - 6, to: this.gunContainer.x + 6 },
+                        duration: 60,
+                        repeat: 3,
+                        yoyo: true,
+                        onComplete: () => {
+                            this.gunContainer.x = this.gameWidth * 0.5;
+                        }
+                    });
+
+                    // Bắn ra vài giọt nước yếu ớt từ đầu vòi
+                    const tipX = this.gunContainer.x;
+                    const tipY = this.gunContainer.y - this.gunTipOffset;
+                    this.waterEmitter.setPosition(tipX, tipY);
+                    this.waterEmitter.explode(4);
+
+                    if (this.promptText) {
+                        this.promptText.setText('⚠️ NO WATER! FIX THE PIPE!');
+                        this.promptText.setColor('#ff4d4d');
+                    }
+
+                    // Hiện bảng sửa ống nước sau 300ms
+                    this.time.delayedCall(300, () => {
+                        this.showPipePuzzle();
+                    });
+                }
                 return;
             }
+
+            if (!this.canClean) return;
+
             this.hasStartedInteracting = true; // Người chơi đã bắt đầu dùng dụng cụ lần đầu
             this.hideTutorial();
             this.stopDirtyHint();
