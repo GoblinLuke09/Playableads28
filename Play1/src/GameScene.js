@@ -8,7 +8,6 @@ import trophyDirtyImg from './assets/Texture/trophy_dirty.webp';
 import trophySoapImg from './assets/Texture/trophy_soap.webp';
 import trophyRubsoapImg from './assets/Texture/trophy_rubsoap.webp';
 import trophyShadowImg from './assets/Texture/shadow.webp';
-import mudSplatterImg from './assets/Texture/mud_splatter.webp';
 import sparkleImg from './assets/Texture/sparkle.webp';
 import radialGlowImg from './assets/Texture/radial_glow.webp';
 import btnTryNowImg from './assets/Texture/btn_try_now.webp';
@@ -91,7 +90,6 @@ export class GameScene extends Phaser.Scene {
         this.load.image('trophy_soap', trophySoapImg);
         this.load.image('trophy_rubsoap', trophyRubsoapImg);
         this.load.image('trophy_shadow', trophyShadowImg);
-        this.load.image('mud_splatter', mudSplatterImg);
         this.load.image('sparkle', sparkleImg);
         this.load.image('radial_glow', radialGlowImg);
         this.load.image('btn_try_now', btnTryNowImg);
@@ -135,6 +133,12 @@ export class GameScene extends Phaser.Scene {
         this.lastCanvasY = null;
         this.lastU = null;
         this.lastV = null;
+
+        // Particle timing throttles
+        this.lastRubBubbleTime = 0;
+        this.lastSprayBubbleTime = 0;
+        this.lastWaterSplashTime = 0;
+        this.lastClothSparkleTime = 0;
 
         this.targetShiftY = 0;
         this.currentShiftY = 0;
@@ -225,7 +229,7 @@ export class GameScene extends Phaser.Scene {
         this.trophyY = this.baseTrophyY;
 
         const targetTrophyHeight = Math.min(height * 0.58, 540);
-        const scale = targetTrophyHeight / 1024;
+        const scale = targetTrophyHeight / 1000;
         this.trophyScale = scale;
 
         this.trophyDisplayW = 1040 * scale;
@@ -249,8 +253,8 @@ export class GameScene extends Phaser.Scene {
 
         // Dynamic Canvas Texture on top (Depth 10) - starts completely transparent
         const dirtySource = this.textures.get('trophy_dirty').getSourceImage();
-        this.dirtyCanvasW = dirtySource.width;
-        this.dirtyCanvasH = dirtySource.height;
+        this.dirtyCanvasW = 1040;
+        this.dirtyCanvasH = 1000;
 
         if (this.textures.exists('mud_canvas_tex')) {
             this.textures.remove('mud_canvas_tex');
@@ -349,7 +353,7 @@ export class GameScene extends Phaser.Scene {
 
         this.waterStreamEmitter = this.waterStreamEmitter_nozzle;
 
-        // Water Impact drops
+        // Water Impact drops (Fixed at origin, emits in world space)
         this.waterEmitter = this.add.particles(0, 0, 'water', {
             speed: { min: 80, max: 220 },
             angle: { min: 0, max: 360 },
@@ -358,13 +362,11 @@ export class GameScene extends Phaser.Scene {
             lifespan: 500,
             gravityY: 200,
             tint: [0xaaeeff, 0xddf5ff, 0xffffff, 0x88ccff],
-            frequency: 80,
-            quantity: 2,
             emitting: false
         });
         this.waterEmitter.setDepth(18);
 
-        // Mist splash
+        // Mist splash (Fixed at origin, emits in world space)
         this.waterMistEmitter = this.add.particles(0, 0, 'water', {
             speed: { min: 60, max: 160 },
             angle: { min: 0, max: 360 },
@@ -373,8 +375,6 @@ export class GameScene extends Phaser.Scene {
             lifespan: 600,
             gravityY: 150,
             tint: [0xccf0ff, 0xeefaff, 0xffffff],
-            frequency: 70,
-            quantity: 2,
             emitting: false
         });
         this.waterMistEmitter.setDepth(15);
@@ -388,36 +388,31 @@ export class GameScene extends Phaser.Scene {
         this.sprayDomeGlow.setBlendMode('ADD');
         this.sprayDomeGlow.setVisible(false);
 
-        // Mud splatter particles
-        this.mudEmitter = this.add.particles(0, 0, 'mud_splatter', {
-            speed: { min: 70, max: 200 },
-            angle: { min: 0, max: 360 },
-            scale: { start: 0.15, end: 0.3 },
-            alpha: { start: 1.0, end: 0 },
-            lifespan: 1000,
-            gravityY: 100,
-            tint: [0x5c3317, 0x4a2810, 0x784420],
-            frequency: 100,
-            quantity: 1,
-            emitting: false
-        });
-        this.mudEmitter.setDepth(18);
-
-        // Bubble Particles (for soap rubbing and spray)
+        // Bubble Particles for spray tools (gun_nozzle & gun_nozzle1) - Fixed at origin, emits in world space
         this.bubbleEmitter = this.add.particles(0, 0, 'bubble', {
-            speed: { min: 90, max: 180 },
+            speed: { min: 50, max: 140 },
             angle: { min: 0, max: 360 },
-            scale: { min: 0.25, max: 0.5 },
+            scale: { start: 0.25, end: 0.45 },
             alpha: { start: 0.95, end: 0 },
-            lifespan: { min: 900, max: 1600 },
-            gravityY: -40,
-            frequency: 35,
-            quantity: 3,
+            lifespan: { min: 800, max: 1500 },
+            gravityY: -35,
             emitting: false
         });
-        this.bubbleEmitter.setDepth(16);
+        this.bubbleEmitter.setDepth(19);
 
-        // Sparkles (for cloth wipe, completion and victory)
+        // Bubble Particles for rubsoap - Fixed at origin, stays in place where rubbed and gently floats upwards
+        this.rubBubbleEmitter = this.add.particles(0, 0, 'bubble', {
+            speed: { min: 25, max: 65 },
+            angle: { min: -120, max: -60 }, // Floats upwards in world space
+            scale: { start: 0.25, end: 0.45 },
+            alpha: { start: 0.85, end: 0 },
+            lifespan: { min: 900, max: 1500 },
+            gravityY: -50,
+            emitting: false
+        });
+        this.rubBubbleEmitter.setDepth(19);
+
+        // Sparkles (Fixed at origin, emits in world space)
         this.sparkleEmitter = this.add.particles(0, 0, 'sparkle', {
             speed: { min: 40, max: 150 },
             scale: { start: 0.25, end: 0 },
@@ -548,8 +543,22 @@ export class GameScene extends Phaser.Scene {
         this.mudCanvas.refresh();
 
         // 3. Prepare Pattern of the next texture to paint on top as player cleans
-        this.currentNextSource = this.textures.get(step.nextTexture).getSourceImage();
-        this.currentPattern = this.mudCtx.createPattern(this.currentNextSource, 'no-repeat');
+        let patternSource = this.textures.get(step.nextTexture).getSourceImage();
+        // Guarantee source is exactly sized to the canvas (1040x1000) so no image is ever smaller or shifted!
+        if (patternSource.width !== this.dirtyCanvasW || patternSource.height !== this.dirtyCanvasH) {
+            if (!this.scaledPatternCanvas) {
+                this.scaledPatternCanvas = document.createElement('canvas');
+                this.scaledPatternCanvas.width = this.dirtyCanvasW;
+                this.scaledPatternCanvas.height = this.dirtyCanvasH;
+            }
+            const pCtx = this.scaledPatternCanvas.getContext('2d');
+            pCtx.clearRect(0, 0, this.dirtyCanvasW, this.dirtyCanvasH);
+            pCtx.drawImage(patternSource, 0, 0, this.dirtyCanvasW, this.dirtyCanvasH);
+            patternSource = this.scaledPatternCanvas;
+        }
+
+        this.currentNextSource = patternSource;
+        this.currentPattern = this.mudCtx.createPattern(patternSource, 'no-repeat');
 
         this.trophyMud.setAlpha(1);
         this.stopDirtyHint();
@@ -632,7 +641,7 @@ export class GameScene extends Phaser.Scene {
             this.waterEmitter,
             this.waterMistEmitter,
             this.bubbleEmitter,
-            this.mudEmitter,
+            this.rubBubbleEmitter,
             this.sparkleEmitter,
             this.gunContainer,
             this.rubContainer,
@@ -855,10 +864,6 @@ export class GameScene extends Phaser.Scene {
 
             this.waterGraphics.clear();
             this.waterStreamEmitter.stop();
-            this.waterEmitter.stop();
-            this.waterMistEmitter.stop();
-            this.bubbleEmitter.stop();
-            this.mudEmitter.stop();
             if (this.sprayDomeGlow) this.sprayDomeGlow.setVisible(false);
 
             if (!this.isGameEnd && this.canClean) {
@@ -896,6 +901,7 @@ export class GameScene extends Phaser.Scene {
 
         let hitX = pointerX;
         let hitY = pointerY;
+        const now = this.time.now;
 
         if (stepType === 'gun') {
             const gunBaseX = pointerX;
@@ -918,25 +924,26 @@ export class GameScene extends Phaser.Scene {
 
             const angleDeg2 = Phaser.Math.RadToDeg(angle);
 
+            // Water stream connects to nozzle tip
             this.waterStreamEmitter.setPosition(tipX, tipY + (this.currentStreamOffsetY || 0));
             this.waterStreamEmitter.setEmitterAngle({ min: angleDeg2 - 18, max: angleDeg2 + 18 });
             if (!this.waterStreamEmitter.emitting) this.waterStreamEmitter.start();
 
-            this.waterEmitter.setPosition(hitX, hitY);
-            this.waterEmitter.setEmitterAngle({ min: angleDeg2 + 100, max: angleDeg2 + 260 });
-            if (!this.waterEmitter.emitting) this.waterEmitter.start();
+            // Water splash & mist emitted at world coordinates (never dragged with tool)
+            if (now - this.lastWaterSplashTime > 50) {
+                this.lastWaterSplashTime = now;
+                this.waterEmitter.emitParticleAt(hitX, hitY, 1);
+                this.waterMistEmitter.emitParticleAt(hitX, hitY, 1);
+            }
 
-            this.waterMistEmitter.setPosition(hitX, hitY);
-            if (!this.waterMistEmitter.emitting) this.waterMistEmitter.start();
-
-            if (currentStep.id === 1) {
-                // Step 1: gun_nozzle spraying foam
-                this.bubbleEmitter.setPosition(hitX, hitY);
-                if (!this.bubbleEmitter.emitting) this.bubbleEmitter.start();
-            } else if (currentStep.id === 3) {
-                // Step 3: gun_nozzle1 rinsing soap
-                this.bubbleEmitter.setPosition(hitX, hitY);
-                if (!this.bubbleEmitter.emitting) this.bubbleEmitter.start();
+            // Spray bubbles emitted at world coordinates (stays floating in place)
+            if (currentStep.id === 1 || currentStep.id === 3) {
+                if (now - this.lastSprayBubbleTime > 55) {
+                    this.lastSprayBubbleTime = now;
+                    const bx = hitX + Phaser.Math.Between(-20, 20);
+                    const by = hitY + Phaser.Math.Between(-20, 20);
+                    this.bubbleEmitter.emitParticleAt(bx, by, Phaser.Math.Between(1, 3));
+                }
             }
 
             if (this.sprayDomeGlow) {
@@ -953,10 +960,15 @@ export class GameScene extends Phaser.Scene {
             const wobble = Math.sin(this.time.now * 0.015) * 0.15;
             this.rubContainer.setRotation(wobble);
 
-            this.bubbleEmitter.setPosition(hitX, hitY);
-            if (!this.bubbleEmitter.emitting) this.bubbleEmitter.start();
+            // Gentle occasional bubbles (spawns 1-2 bubbles at the exact rub location in world space, never follows tool)
+            if (now - this.lastRubBubbleTime > 180) {
+                this.lastRubBubbleTime = now;
+                const bx = hitX + Phaser.Math.Between(-15, 15);
+                const by = hitY + Phaser.Math.Between(-15, 15);
+                this.rubBubbleEmitter.emitParticleAt(bx, by, Phaser.Math.Between(1, 2));
+            }
         } else if (stepType === 'cloth') {
-            // sweat_cloth follows pointer
+            // sweat_cloth follows pointer (Step 4 only - polish with sparkles at world position)
             hitX = pointerX;
             hitY = pointerY;
             this.clothContainer.setPosition(pointerX, pointerY);
@@ -964,8 +976,12 @@ export class GameScene extends Phaser.Scene {
             const tilt = Math.cos(this.time.now * 0.012) * 0.12;
             this.clothContainer.setRotation(tilt);
 
-            this.sparkleEmitter.setPosition(hitX, hitY);
-            this.sparkleEmitter.explode(1);
+            if (now - this.lastClothSparkleTime > 75) {
+                this.lastClothSparkleTime = now;
+                const sx = hitX + Phaser.Math.Between(-20, 20);
+                const sy = hitY + Phaser.Math.Between(-20, 20);
+                this.sparkleEmitter.emitParticleAt(sx, sy, 1);
+            }
         }
 
         // Calculate position relative to trophy
@@ -1007,14 +1023,7 @@ export class GameScene extends Phaser.Scene {
 
             this.mudCanvas.refresh();
 
-            if (currentStep.id === 1) {
-                this.mudEmitter.setPosition(hitX, hitY);
-                if (!this.mudEmitter.emitting) this.mudEmitter.start();
-            }
-
             this.checkProgressUV(curU, curV);
-        } else {
-            this.mudEmitter.stop();
         }
 
         this.lastCanvasX = curCanvasX;
@@ -1061,11 +1070,13 @@ export class GameScene extends Phaser.Scene {
             this.progress = Math.min(100, Math.round(rawProgress));
             this.updateProgressBar();
 
-            if (this.progress % 15 === 0 || newlyCleaned > 4) {
-                const trophyLeft = this.trophyX - this.trophyDisplayW / 2;
-                const trophyTop = this.trophyY - this.trophyDisplayH / 2;
-                this.sparkleEmitter.setPosition(trophyLeft + targetU * this.trophyDisplayW, trophyTop + targetV * this.trophyDisplayH);
-                this.sparkleEmitter.explode(4);
+            // Sparkle bursts during cleaning ONLY on the final step (sweat_cloth)
+            if (this.currentStepIndex === STEPS.length - 1) {
+                if (this.progress % 15 === 0 || newlyCleaned > 4) {
+                    const trophyLeft = this.trophyX - this.trophyDisplayW / 2;
+                    const trophyTop = this.trophyY - this.trophyDisplayH / 2;
+                    this.sparkleEmitter.emitParticleAt(trophyLeft + targetU * this.trophyDisplayW, trophyTop + targetV * this.trophyDisplayH, 4);
+                }
             }
 
             // Threshold to complete current step (98%)
@@ -1082,10 +1093,6 @@ export class GameScene extends Phaser.Scene {
 
         this.waterGraphics.clear();
         this.waterStreamEmitter.stop();
-        this.waterEmitter.stop();
-        this.waterMistEmitter.stop();
-        this.bubbleEmitter.stop();
-        this.mudEmitter.stop();
         if (this.sprayDomeGlow) this.sprayDomeGlow.setVisible(false);
 
         this.hideTutorial();
@@ -1095,7 +1102,12 @@ export class GameScene extends Phaser.Scene {
         this.progress = 100;
         this.updateProgressBar();
 
-        this.sparkleSound.play();
+        // Play sound: sparkle sound only on the last step, click sound on previous steps
+        if (this.currentStepIndex === STEPS.length - 1) {
+            this.sparkleSound.play();
+        } else {
+            this.clickSound.play();
+        }
 
         // Ensure 100% full reveal on canvas
         this.mudCtx.save();
@@ -1161,10 +1173,6 @@ export class GameScene extends Phaser.Scene {
 
         this.waterGraphics.clear();
         this.waterStreamEmitter.stop();
-        this.waterEmitter.stop();
-        this.waterMistEmitter.stop();
-        this.bubbleEmitter.stop();
-        this.mudEmitter.stop();
         this.hideTutorial();
         this.stopDirtyHint();
         if (this.hintTimer) this.hintTimer.remove();
@@ -1213,8 +1221,7 @@ export class GameScene extends Phaser.Scene {
             callback: () => {
                 const rx = this.trophyX + Phaser.Math.Between(-this.trophyDisplayW * 0.4, this.trophyDisplayW * 0.4);
                 const ry = this.trophyY + Phaser.Math.Between(-this.trophyDisplayH * 0.45, this.trophyDisplayH * 0.45);
-                this.sparkleEmitter.setPosition(rx, ry);
-                this.sparkleEmitter.explode(6);
+                this.sparkleEmitter.emitParticleAt(rx, ry, 6);
             }
         });
 
@@ -1338,10 +1345,10 @@ export class GameScene extends Phaser.Scene {
         this.resizeBackground();
 
         const targetTrophyHeight = Math.min(height * 0.58, 540);
-        const scale = targetTrophyHeight / 1024;
+        const scale = targetTrophyHeight / 1000;
         this.trophyScale = scale;
-        this.trophyDisplayW = 492 * scale;
-        this.trophyDisplayH = 1024 * scale;
+        this.trophyDisplayW = 1040 * scale;
+        this.trophyDisplayH = 1000 * scale;
 
         if (this.trophyBase) {
             this.trophyBase.setPosition(this.trophyX, this.trophyY).setDisplaySize(this.trophyDisplayW, this.trophyDisplayH);
