@@ -7,6 +7,7 @@ import trophyWetImg from './assets/Texture/trophy_wet.webp';
 import trophyDirtyImg from './assets/Texture/trophy_dirty.webp';  
 import trophyShadowImg from './assets/Texture/shadow.webp';
 import mudSplatterImg from './assets/Texture/mud_splatter.webp';
+
 import sparkleImg from './assets/Texture/sparkle.webp';
 import radialGlowImg from './assets/Texture/radial_glow.webp';
 import btnTryNowImg from './assets/Texture/btn_try_now.webp';
@@ -83,6 +84,11 @@ export class GameScene extends Phaser.Scene {
         this.progress = 0;
         this.cleanedPointsCount = 0;
         this.lastWashSoundTime = 0;
+        this.lastWaterSplashTime = 0;
+        this.lastMistTime = 0;
+        this.lastBubbleTime = 0;
+        this.lastSparkleTime = 0;
+        this.lastMudTime = 0;
         this.lastCanvasX = null;
         this.lastCanvasY = null;
 
@@ -342,32 +348,14 @@ export class GameScene extends Phaser.Scene {
         this.sprayDomeGlow.setBlendMode('ADD');
         this.sprayDomeGlow.setVisible(false);
 
-        // Mud splatter particles (Depth 18)
-        this.mudEmitter 
-        = this.add.particles(0, 0, 'mud_splatter', {
-            speed: { min: 70, max: 200 },
-            angle: { min: 0, max: 360 },
-            scale: { start: 0.15, end: 0.3 },
-            alpha: { start: 1.0, end: 0 },
-            lifespan: 1000,
-            gravityY: 100,    
-            tint: [0x5c3317, 0x4a2810, 0x784420],
-            frequency: 100, 
-            quantity: 1,
-            emitting: false
-        });
-        this.mudEmitter.setDepth(18);
-
-        // === BUBBLE PARTICLES — bubbles spreading widely around and floating upwards (Depth 19) ===
+        // === BUBBLE PARTICLES — nổi lên tự nhiên tại vị trí chạm (Depth 17) ===
         this.bubbleEmitter = this.add.particles(0, 0, 'bubble', {
-            speed: { min: 100, max: 130 },
-            angle: { min: 0, max: 360 }, // Burst outward in all directions
-            scale: { min: 0.3, max: 0.5 },
-            alpha: { start: 0.9, end: 0 },
-            lifespan: { min: 1000, max: 1800 },
-            gravityY: 0, // Strong upward buoyancy while spreading
-            frequency: 45,
-            quantity: 3,
+            speed: { min: 30, max: 80 },
+            angle: { min: -130, max: -50 }, // Hướng lên trên
+            scale: { min: 0.2, max: 0.45 },
+            alpha: { start: 0.85, end: 0 },
+            lifespan: { min: 800, max: 1400 },
+            gravityY: -60, // Nổi lên nhẹ
             emitting: false
         });
         this.bubbleEmitter.setDepth(17);
@@ -383,6 +371,20 @@ export class GameScene extends Phaser.Scene {
             emitting: false
         });
         this.sparkleEmitter.setDepth(20);
+
+        // === MUD SPLATTER cho khăn lau (Depth 19) ===
+        // Hạt bùn bắn nhẹ ra xung quanh khi chà khăn — world-space, one-shot
+        this.mudEmitter = this.add.particles(0, 0, 'mud_splatter', {
+            speed: { min: 40, max: 130 },
+            angle: { min: 0, max: 360 },
+            scale: { start: 0.3, end: 0.5 },
+            alpha: { start: 0.9, end: 0 },
+            lifespan: { min: 400, max: 700 },
+            gravityY: 90,
+            tint: [0x5c3317, 0x4a2810, 0x784420, 0x3b1f0a],
+            emitting: false
+        });
+        this.mudEmitter.setDepth(19);
     }
 
     setupWaterGun() {
@@ -927,7 +929,6 @@ export class GameScene extends Phaser.Scene {
                 this.waterEmitter.stop();
                 this.waterMistEmitter.stop();
                 if (this.bubbleEmitter) this.bubbleEmitter.stop();
-                this.mudEmitter.stop();
                 if (this.sprayDomeGlow) this.sprayDomeGlow.setVisible(false);
             }
 
@@ -946,9 +947,28 @@ export class GameScene extends Phaser.Scene {
         if (this.isGameEnd) return;
 
         if (this.isRagMode) {
-            // === RAG MODE: Chỉ di chuyển khăn theo ngón tay, trophy KHÔNG thay đổi gì ===
+            // === RAG MODE: Di chuyển khăn theo ngón tay ===
             if (this.ragContainer) {
                 this.ragContainer.setPosition(pointerX, pointerY);
+            }
+
+            // Mud splatter khi khăn chà trên trophy — world-space, one-shot
+            if (this.mudEmitter) {
+                const trophyLeft = this.trophyX - this.trophyDisplayW / 2;
+                const trophyTop  = this.trophyY - this.trophyDisplayH / 2;
+                const onTrophy = (
+                    pointerX >= trophyLeft && pointerX <= trophyLeft + this.trophyDisplayW &&
+                    pointerY >= trophyTop  && pointerY <= trophyTop  + this.trophyDisplayH
+                );
+                if (onTrophy) {
+                    const now = this.time.now;
+                    if (now - this.lastMudTime > 55) {
+                        this.lastMudTime = now;
+                        const mx = pointerX + Phaser.Math.Between(-18, 18);
+                        const my = pointerY + Phaser.Math.Between(-12, 12);
+                        this.mudEmitter.emitParticleAt(mx, my, Phaser.Math.Between(2, 4));
+                    }
+                }
             }
             return;
         }
@@ -998,24 +1018,6 @@ export class GameScene extends Phaser.Scene {
         this.waterStreamEmitter.setEmitterAngle({ min: angleDeg2 - 18, max: angleDeg2 + 18 });
         if (!this.waterStreamEmitter.emitting) this.waterStreamEmitter.start();
 
-        this.waterEmitter.setPosition(hitX, hitY);
-        this.waterEmitter.setEmitterAngle({ min: angleDeg2 + 100, max: angleDeg2 + 260 });
-        if (!this.waterEmitter.emitting) this.waterEmitter.start();
-
-        this.waterMistEmitter.setPosition(hitX, hitY);
-        this.waterMistEmitter.setEmitterAngle({ min: 0, max: 360 });
-        if (!this.waterMistEmitter.emitting) this.waterMistEmitter.start();
-
-        if (this.bubbleEmitter) {
-            this.bubbleEmitter.setPosition(hitX, hitY);
-            if (!this.bubbleEmitter.emitting) this.bubbleEmitter.start();
-        }
-
-        if (this.sprayDomeGlow) {
-            this.sprayDomeGlow.setPosition(hitX, hitY);
-            this.sprayDomeGlow.setVisible(true);
-        }
-
         const trophyLeft = this.trophyX - this.trophyDisplayW / 2;
         const trophyTop = this.trophyY - this.trophyDisplayH / 2;
 
@@ -1028,8 +1030,39 @@ export class GameScene extends Phaser.Scene {
         const cleanRadius = this.currentCleanRadius || 45;
         const eraseCanvasRadius = cleanRadius * (this.dirtyCanvasW / this.trophyDisplayW);
 
-        if (hitX >= trophyLeft - 30 && hitX <= trophyLeft + this.trophyDisplayW + 30 &&
-            hitY >= trophyTop - 30 && hitY <= trophyTop + this.trophyDisplayH + 30) {
+        const isHittingTrophy = (
+            hitX >= trophyLeft - 30 && hitX <= trophyLeft + this.trophyDisplayW + 30 &&
+            hitY >= trophyTop - 30 && hitY <= trophyTop + this.trophyDisplayH + 30
+        );
+
+        if (isHittingTrophy) {
+            const now = this.time.now;
+
+            // --- waterEmitter: one-shot tại hitX/hitY, throttle 40ms ---
+            if (this.waterEmitter && (now - this.lastWaterSplashTime > 40)) {
+                this.lastWaterSplashTime = now;
+                this.waterEmitter.emitParticleAt(hitX, hitY, 3);
+            }
+
+            // --- waterMistEmitter: one-shot, throttle 50ms ---
+            if (this.waterMistEmitter && (now - this.lastMistTime > 50)) {
+                this.lastMistTime = now;
+                this.waterMistEmitter.emitParticleAt(hitX, hitY, 2);
+            }
+
+            // --- bubbleEmitter: nổi lên từ vị trí chạm, throttle 60ms ---
+            if (this.bubbleEmitter && (now - this.lastBubbleTime > 60)) {
+                this.lastBubbleTime = now;
+                const bx = hitX + Phaser.Math.Between(-12, 12);
+                const by = hitY + Phaser.Math.Between(-8, 8);
+                this.bubbleEmitter.emitParticleAt(bx, by, Phaser.Math.Between(1, 2));
+            }
+
+            // Glow chỉ hiện khi chạm vào trophy
+            if (this.sprayDomeGlow) {
+                this.sprayDomeGlow.setPosition(hitX, hitY);
+                this.sprayDomeGlow.setVisible(true);
+            }
 
             this.mudCtx.save();
             this.mudCtx.globalCompositeOperation = 'destination-out';
@@ -1051,12 +1084,9 @@ export class GameScene extends Phaser.Scene {
 
             this.mudCanvas.refresh();
 
-            this.mudEmitter.setPosition(hitX, hitY);
-            if (!this.mudEmitter.emitting) this.mudEmitter.start();
-
             this.checkProgressUV(curU, curV);
         } else {
-            this.mudEmitter.stop();
+            if (this.sprayDomeGlow) this.sprayDomeGlow.setVisible(false);
         }
 
         this.lastCanvasX = curCanvasX;
@@ -1105,8 +1135,9 @@ export class GameScene extends Phaser.Scene {
             if (this.progress % 10 === 0 || newlyCleaned > 3) {
                 const trophyLeft = this.trophyX - this.trophyDisplayW / 2;
                 const trophyTop = this.trophyY - this.trophyDisplayH / 2;
-                this.sparkleEmitter.setPosition(trophyLeft + targetU * this.trophyDisplayW, trophyTop + targetV * this.trophyDisplayH);
-                this.sparkleEmitter.explode(4);
+                const sx = trophyLeft + targetU * this.trophyDisplayW;
+                const sy = trophyTop + targetV * this.trophyDisplayH;
+                this.sparkleEmitter.emitParticleAt(sx, sy, 5);
             }
 
             if (this.progress >= 99 && !this.isGameEnd) {
@@ -1166,7 +1197,6 @@ export class GameScene extends Phaser.Scene {
         if (this.waterCoreEmitter) this.waterCoreEmitter.stop();
         this.waterEmitter.stop();
         if (this.bubbleEmitter) this.bubbleEmitter.stop();
-        this.mudEmitter.stop();
         this.hideTutorial();
         this.stopDirtyHint();
         if (this.hintTimer) this.hintTimer.remove();
