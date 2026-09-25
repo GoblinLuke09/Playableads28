@@ -36,7 +36,7 @@ const STEPS = [
         toolType: 'gun',
         currentTexture: 'trophy_dirty',
         nextTexture: 'trophy_soap',
-        prompt: 'FOAM THE TROPHY',
+        prompt: 'FOAM',
         cleanRadius: 48,
         streamOffsetY: 0,
         hasPipe: false
