@@ -58,6 +58,25 @@ export class GameScene extends Phaser.Scene {
         this.background = this.add.image(this.gameWidth / 2, this.gameHeight / 2, 'bg_stadium').setDepth(-5);
         this.resizeBackground();
 
+        // Generate circular white particle texture
+        const pGraphics = this.make.graphics({ x: 0, y: 0, add: false });
+        pGraphics.fillStyle(0xffffff, 1);
+        pGraphics.fillCircle(8, 8, 8);
+        pGraphics.generateTexture('white_particle', 16, 16);
+
+        // Particle emitter for sweat_cloth wiping effect
+        this.clothParticleEmitter = this.add.particles(0, 0, 'white_particle', {
+            speed: { min: 60, max: 180 },
+            angle: { min: 0, max: 360 },
+            scale: { start: 0.55, end: 0.08 },
+            alpha: { start: 1, end: 0 },
+            lifespan: { min: 300, max: 550 },
+            gravityY: 60,
+            tint: [0xffffff, 0xf0faff, 0xe2f7ff],
+            emitting: false
+        });
+        this.clothParticleEmitter.setDepth(5);
+
         this.setupSink();
         this.setupTrash();
         this.setupPlunger();
@@ -208,7 +227,7 @@ export class GameScene extends Phaser.Scene {
         const clothTargetX = this.sinkX;
         const clothTargetY = this.sinkY + 280;
         this.cloth = this.add.image(this.gameWidth + 140, clothTargetY, 'sweat_cloth')
-            .setDisplaySize(115, 105).setDepth(7)
+            .setDisplaySize(115, 105).setDepth(8)
             .setInteractive({ useHandCursor: true });
         this.clothHintHand = this.add.image(this.gameWidth + 185, clothTargetY + 45, 'hand')
             .setDisplaySize(78, 78).setDepth(8).setVisible(false);
@@ -269,6 +288,8 @@ export class GameScene extends Phaser.Scene {
 
     stopClothDrag() {
         this.isDraggingCloth = false;
+        this.lastClothX = null;
+        this.lastClothY = null;
     }
 
     initCleaningProgress() {
@@ -306,6 +327,24 @@ export class GameScene extends Phaser.Scene {
         if (!this.cloth || this.state !== 'cloth') return;
         this.removeHint(this.cloth);
         this.cloth.setPosition(x, y);
+
+        // Emit independent bursting white particles at the touch point
+        if (this.clothParticleEmitter) {
+            const dist = (this.lastClothX !== undefined && this.lastClothX !== null)
+                ? Phaser.Math.Distance.Between(this.lastClothX, this.lastClothY, x, y)
+                : 20;
+
+            if (dist > 3) {
+                const count = Math.min(5, Math.max(2, Math.floor(dist / 6)));
+                for (let i = 0; i < count; i++) {
+                    const ox = Phaser.Math.Between(-14, 14);
+                    const oy = Phaser.Math.Between(-14, 14);
+                    this.clothParticleEmitter.emitParticleAt(x + ox, y + oy, 1);
+                }
+                this.lastClothX = x;
+                this.lastClothY = y;
+            }
+        }
 
         const left = this.sinkX - this.sinkWidth / 2;
         const top = this.sinkY - this.sinkHeight / 2;
