@@ -2,23 +2,26 @@ import Phaser from 'phaser';
 
 // Import all textures
 import bgImg from './assets/Texture/bg_stadium.webp';
-import trophyCleanImg from './assets/Texture/trophy_clean.webp';
-import trophyWetImg from './assets/Texture/trophy_wet.webp';
-import trophyDirtyImg from './assets/Texture/trophy_dirty.webp';  
-import trophyShadowImg from './assets/Texture/shadow.webp';
+import poolDirtyImg from './assets/Texture/pool_dirty.webp';
+import poolSoapImg from './assets/Texture/pool_soap.webp';
+import poolCleanImg from './assets/Texture/pool_clean.webp';
+import poolWaterImg from './assets/Texture/Pool_water.webp';
+import waterImg from './assets/Texture/water.webp';
+import trash1Img from './assets/Texture/trash1.webp';
+import trash2Img from './assets/Texture/trash2.webp';
+import trash3Img from './assets/Texture/trash3.webp';
+import trash4Img from './assets/Texture/trash4.webp';
+import gunNozzleImg from './assets/Texture/gun_nozzle.webp';
+import gunNozzle1Img from './assets/Texture/gun_nozzle1.webp';
+import waterPipeImg from './assets/Texture/water_pipe.webp';
+import waterDropsImg from './assets/Texture/water_drops.webp';
+import bubbleImg from './assets/Texture/bubble.webp';
+import handImg from './assets/Texture/hand.webp';
 import sparkleImg from './assets/Texture/sparkle.webp';
 import radialGlowImg from './assets/Texture/radial_glow.webp';
 import btnTryNowImg from './assets/Texture/btn_try_now.webp';
 import progressBgImg from './assets/Texture/progress_bg.webp';
 import progressFillImg from './assets/Texture/progress_fill.webp';
-import gunNozzleImg from './assets/Texture/gun_nozzle.webp';
-import gunNozzle1Img from './assets/Texture/gun_nozzle1.webp';
-import waterPipeImg from './assets/Texture/water_pipe.webp';
-import bubbleImg from './assets/Texture/bubble.webp';
-import btnToolImg from './assets/Texture/btn_Tool.png';
-import handImg from './assets/Texture/hand.webp';
-import waterImg from './assets/Texture/water.webp';
-import waterDropsImg from './assets/Texture/water_drops.webp';
 
 // Import sounds
 import sparkleSnd from './assets/Sound/sparkle.mp3';
@@ -33,235 +36,446 @@ export class GameScene extends Phaser.Scene {
     preload() {
         // Load textures
         this.load.image('bg_stadium', bgImg);
-        this.load.image('trophy_clean', trophyCleanImg);
-        this.load.image('trophy_wet', trophyWetImg);
-        this.load.image('trophy_dirty', trophyDirtyImg);
-        this.load.image('trophy_shadow',trophyShadowImg);
+        this.load.image('pool_dirty', poolDirtyImg);
+        this.load.image('pool_soap', poolSoapImg);
+        this.load.image('pool_clean', poolCleanImg);
+        this.load.image('Pool_water', poolWaterImg);
+        this.load.image('water', waterImg);
+        this.load.image('trash1', trash1Img);
+        this.load.image('trash2', trash2Img);
+        this.load.image('trash3', trash3Img);
+        this.load.image('trash4', trash4Img);
+        this.load.image('gun_nozzle', gunNozzleImg);
+        this.load.image('gun_nozzle1', gunNozzle1Img);
+        this.load.image('water_pipe', waterPipeImg);
+        this.load.image('water_drops', waterDropsImg);
+        this.load.image('bubble', bubbleImg);
+        this.load.image('hand', handImg);
         this.load.image('sparkle', sparkleImg);
         this.load.image('radial_glow', radialGlowImg);
         this.load.image('btn_try_now', btnTryNowImg);
         this.load.image('progress_bg', progressBgImg);
         this.load.image('progress_fill', progressFillImg);
-        this.load.image('gun_nozzle', gunNozzleImg);
-        this.load.image('gun_nozzle1', gunNozzle1Img);
-        this.load.image('water_pipe', waterPipeImg);
-        this.load.image('bubble', bubbleImg);
-        this.load.image('btn_tool', btnToolImg);
-        this.load.image('hand', handImg);
-        this.load.image('water', waterImg);
-        this.load.image('water_drops', waterDropsImg);
 
         // Load audio
         this.load.audio('sparkle', sparkleSnd);
         this.load.audio('win', winSnd);
         this.load.audio('click', clickSnd);
 
-        // Tạo mảnh pháo hoa giấy (Confetti) hình chữ nhật nhỏ
-        let cGraphics = this.make.graphics({ x: 0, y: 0, add: false });
+        // Generate confetti texture
+        const cGraphics = this.make.graphics({ x: 0, y: 0, add: false });
         cGraphics.fillStyle(0xffffff, 1);
-        cGraphics.fillRect(0, 0, 10, 6); // Mảnh giấy 10x6
+        cGraphics.fillRect(0, 0, 10, 6);
         cGraphics.generateTexture('confetti', 10, 6);
-
     }
 
     create() {
-
-
         this.gameWidth = 450;
         this.gameHeight = 800;
         this.isGameEnd = false;
         this.isSpraying = false;
-        this.hasStartedInteracting = false; // Chỉ bắt đầu đếm nhấp nháy sau khi người chơi chạm vào dụng cụ lần đầu
-        this.isAudioPlaying = false; // Biến kiểm tra âm thanh phun nước đang phát hay chưa
-        this.hasSelectedTool = false;
+        this.hasStartedInteracting = false;
+        this.isAudioPlaying = false;
+
+        // Phases: 'trash' -> 'drain' -> 'soap' -> 'wash' -> 'win'
+        this.currentPhase = 'trash';
         this.canClean = false;
+
         this.progress = 0;
         this.cleanedPointsCount = 0;
         this.lastWashSoundTime = 0;
         this.lastBubbleTime = 0;
         this.lastWaterSplashTime = 0;
         this.lastMistTime = 0;
+        this.lastSparkleTime = 0;
         this.lastCanvasX = null;
         this.lastCanvasY = null;
 
-        this.targetShiftY = 0;
-        this.currentShiftY = 0;
         this.targetShiftX = 0;
         this.currentShiftX = 0;
-        this.targetBgShiftX = 0;
-        this.currentBgShiftX = 0;
-        this.baseTrophyX = this.gameWidth / 2;
-        this.baseBgX = this.gameWidth / 2 - 10;
-        this.baseTrophyY = this.gameHeight * 0.48;
+        this.basePoolX = this.gameWidth / 2;
+        this.basePoolY = this.gameHeight * 0.44;
+        this.baseBgX = this.gameWidth / 2;
         this.baseBgY = this.gameHeight * 0.35;
 
-        // Sound instances
+        // Sounds
         this.sparkleSound = this.sound.add('sparkle', { volume: 0.8 });
         this.winSound = this.sound.add('win', { volume: 0.9 });
         this.clickSound = this.sound.add('click', { volume: 0.8 });
 
-        // Khởi tạo bộ tạo âm thanh xịt nước áp lực cao (Web Audio Synthesis)
         this.createProceduralWaterSound();
-
 
         const actualWidth = this.scale.width;
         const actualHeight = this.scale.height;
-        const dx = (actualWidth - this.gameWidth ) / 2;
+        const dx = (actualWidth - this.gameWidth) / 2;
         const dy = (actualHeight - this.gameHeight) / 2;
         this.cameras.main.setScroll(-dx, -dy);
 
-
-        //const { width, height } = {this.gameWidth,this.gameHeight};
-        this.bg = this.add.image(this.gameWidth / 2 - 10, this.baseBgY - 150, 'bg_stadium');
+        // 1. Background
+        this.bg = this.add.image(this.gameWidth / 2, this.baseBgY - 100, 'bg_stadium');
         this.bg.setDepth(-1);
         const bgScaleX = this.gameWidth / this.bg.width;
         const bgScaleY = this.gameHeight / this.bg.height;
         this.bg.setScale(Math.max(bgScaleX, bgScaleY) * 2.45);
 
-        // Set initial wide camera zoom (1.4x wider view)
         this.cameraZoomTween = null;
         this.cameras.main.setZoom(1 / 1.4);
 
-        // 2. Setup Trophy (Clean underneath, Dirty Canvas on top)
-        this.setupTrophy();
+        // 2. Setup Pool Layers
+        this.setupPoolLayers();
 
-        // 3. Water Jet Graphics & Particles
+        // 3. Setup Water Surface & Trash
+        this.setupWaterAndTrash();
+
+        // 4. Setup Particles & Effects
         this.setupEffects();
 
-        // 4. Pressure Washer Gun (initially off-screen)
+        // 5. Setup Water Gun (hidden initially)
         this.setupWaterGun();
 
-        // 5. UI Elements
+        // 6. Setup UI
         this.setupUI();
 
-        // 6. Tutorial Hand (for cleaning)
+        // 7. Setup Tutorial Hand
         this.setupTutorial();
 
-        // 7. Tool Selection UI (Choose tool first before cleaning)
-        this.setupToolSelection();
-
-        // 8. Setup Separate UI Camera (fixes UI scale & position independent of world zoom)
+        // 8. Setup Cameras
         this.setupCameras();
 
-        // 9. Input listeners
+        // 9. Setup Inputs
         this.setupInput();
+
+        // Start Trash Phase
+        this.startTrashPhase();
 
         // Resize handler
         this.scale.on('resize', this.handleResize, this);
 
-        // Notify Playturbo
         if (typeof window.gameReady === 'function') {
             window.gameReady();
         }
     }
 
-    resizeBackground() {
-        const { width, height } = this.scale;
-        this.baseBgY = height / 2;
-        this.bg.setPosition(width / 2, this.baseBgY);
-        const scaleX = width / this.bg.width;
-        const scaleY = height / this.bg.height;
-        const maxScale = Math.max(scaleX, scaleY) * 1.65;
-        this.bg.setScale(maxScale);
-    }
-
-    setupTrophy() {
+    setupPoolLayers() {
         const width = this.gameWidth;
         const height = this.gameHeight;
 
-        this.baseTrophyX = width / 2;
-        this.trophyX = this.baseTrophyX + this.currentShiftX;
-        this.baseTrophyY = height * 0.38;
-        this.trophyY = this.baseTrophyY;
+        this.basePoolX = width / 2;
+        this.poolX = this.basePoolX;
+        this.basePoolY = height * 0.44;
+        this.poolY = this.basePoolY;
 
-        const targetTrophyHeight = Math.min(height * 0.58, 540);
-        const scale = targetTrophyHeight / 1024;
-        this.trophyScale = scale;
+        // Size pool nicely on screen
+        const targetPoolHeight = Math.min(height * 0.52, 480);
+        const sourceDirty = this.textures.get('pool_dirty').getSourceImage();
+        const aspect = sourceDirty.width / sourceDirty.height;
+        this.poolDisplayH = targetPoolHeight;
+        this.poolDisplayW = targetPoolHeight * aspect;
 
-        this.trophyDisplayW = 1040 * scale;
-        this.trophyDisplayH = 1000 * scale;
+        this.canvasW = sourceDirty.width;
+        this.canvasH = sourceDirty.height;
 
-        // Glow behind trophy for victory (Depth 4)
-        this.trophyGlow = this.add.image(this.trophyX, this.trophyY, 'radial_glow');
-        this.trophyGlow.setDepth(4);
-        this.trophyGlow.setScale(scale * 2.5);
-        this.trophyGlow.setTint(0xffdf66);
-        this.trophyGlow.setAlpha(0);
+        // Glow behind pool for victory (Depth 4)
+        this.poolGlow = this.add.image(this.poolX, this.poolY, 'radial_glow');
+        this.poolGlow.setDepth(4);
+        this.poolGlow.setScale(2.2);
+        this.poolGlow.setTint(0x00ffff);
+        this.poolGlow.setAlpha(0);
 
-        this.trophyShadow = this.add.image(this.trophyX, this.trophyY + 145, 'trophy_shadow');
-        this.trophyShadow.setScale(0.45);
-        this.trophyShadow.setDepth(3);
+        // Layer 1: pool_clean at bottom (Depth 5)
+        this.poolClean = this.add.image(this.poolX, this.poolY, 'pool_clean');
+        this.poolClean.setDepth(5);
+        this.poolClean.setDisplaySize(this.poolDisplayW, this.poolDisplayH);
 
-        // Clean Golden Trophy Underneath (Depth 5)
-        this.trophyClean = this.add.image(this.trophyX, this.trophyY, 'trophy_clean');
-        this.trophyClean.setDepth(5);
-        this.trophyClean.setDisplaySize(this.trophyDisplayW, this.trophyDisplayH);
+        // Layer 2: pool_soap (Depth 6) - revealed during Phase 3, erased in Phase 4
+        this.poolSoap = this.add.image(this.poolX, this.poolY, 'pool_soap');
+        this.poolSoap.setDepth(6);
+        this.poolSoap.setDisplaySize(this.poolDisplayW, this.poolDisplayH);
 
-        // Wet Trophy Layer on top of Clean (Depth 6) - revealed when cleaning
-        this.trophyWet = this.add.image(this.trophyX, this.trophyY, 'trophy_wet');
-        this.trophyWet.setDepth(6);
-        this.trophyWet.setDisplaySize(this.trophyDisplayW, this.trophyDisplayH);
+        // Layer 3: Dynamic Canvas for erasing (Depth 8)
+        if (this.textures.exists('erase_canvas_tex')) {
+            this.textures.remove('erase_canvas_tex');
+        }
+        this.eraseCanvas = this.textures.createCanvas('erase_canvas_tex', this.canvasW, this.canvasH);
+        this.eraseCtx = this.eraseCanvas.context;
 
-        // Create Dynamic Canvas Texture for the Dirty Mud Layer on top (Depth 10)
-        const dirtySource = this.textures.get('trophy_dirty').getSourceImage();
-        this.dirtyCanvasW = dirtySource.width;
-        this.dirtyCanvasH = dirtySource.height;
+        // Initially draw pool_dirty onto canvas
+        this.eraseCtx.drawImage(sourceDirty, 0, 0);
+        this.eraseCanvas.refresh();
 
-        if (this.textures.exists('mud_canvas_tex')) {
-            this.textures.remove('mud_canvas_tex');
+        this.poolCanvasImg = this.add.image(this.poolX, this.poolY, 'erase_canvas_tex');
+        this.poolCanvasImg.setDepth(8);
+        this.poolCanvasImg.setDisplaySize(this.poolDisplayW, this.poolDisplayH);
+
+        this.initProgressGrid();
+    }
+
+    setupWaterAndTrash() {
+        // Water layer on top of pool (Depth 12)
+        this.waterLayer = this.add.image(this.poolX, this.poolY, 'Pool_water');
+        this.waterLayer.setDepth(12);
+        this.waterLayer.setDisplaySize(this.poolDisplayW * 0.96, this.poolDisplayH * 0.95);
+        this.waterLayer.setAlpha(0.92);
+
+        // Water idle wave animation
+        this.waterWaveTween = this.tweens.add({
+            targets: this.waterLayer,
+            scaleX: (this.poolDisplayW * 0.96 / this.waterLayer.width) * 1.02,
+            scaleY: (this.poolDisplayH * 0.95 / this.waterLayer.height) * 0.98,
+            yoyo: true,
+            repeat: -1,
+            duration: 1600,
+            ease: 'Sine.easeInOut'
+        });
+
+        // 4 Trash items on water (Depth 15)
+        this.trashItems = [];
+        const trashConfigs = [
+            { key: 'trash1', relX: -0.22, relY: -0.16, scale: 0.38, rot: -10 },
+            { key: 'trash2', relX: 0.20, relY: -0.10, scale: 0.36, rot: 15 },
+            { key: 'trash3', relX: -0.16, relY: 0.16, scale: 0.34, rot: 8 },
+            { key: 'trash4', relX: 0.18, relY: 0.20, scale: 0.38, rot: -12 }
+        ];
+
+        trashConfigs.forEach((cfg, index) => {
+            const posX = this.poolX + cfg.relX * this.poolDisplayW;
+            const posY = this.poolY + cfg.relY * this.poolDisplayH;
+
+            const trash = this.add.image(posX, posY, cfg.key);
+            trash.setDepth(15);
+            trash.setScale(cfg.scale);
+            trash.setRotation(Phaser.Math.DegToRad(cfg.rot));
+            trash.setInteractive({ useHandCursor: true });
+
+            // Idle floating animation
+            trash.floatTween = this.tweens.add({
+                targets: trash,
+                y: posY + 8,
+                rotation: Phaser.Math.DegToRad(cfg.rot + 6),
+                duration: 1000 + index * 200,
+                yoyo: true,
+                repeat: -1,
+                ease: 'Sine.easeInOut'
+            });
+
+            trash.on('pointerdown', (pointer) => {
+                if (pointer && pointer.event) pointer.event.stopPropagation();
+                this.collectTrash(trash, index);
+            });
+
+            this.trashItems.push(trash);
+        });
+
+        this.remainingTrash = this.trashItems.length;
+    }
+
+    startTrashPhase() {
+        this.currentPhase = 'trash';
+        this.canClean = false;
+        if (this.promptText) {
+            this.promptText.setText('TAP TO REMOVE TRASH!');
+            this.promptText.setColor('#ffea75');
+        }
+        this.updateTrashTutorialHand();
+    }
+
+    updateTrashTutorialHand() {
+        const nextTrash = this.trashItems.find(t => t && t.active && t.visible);
+        if (nextTrash && this.tutorialHand) {
+            this.tutorialContainer.setVisible(true);
+            this.tutorialContainer.setPosition(nextTrash.x + 20, nextTrash.y + 30);
+            if (this.tutorialTween) this.tutorialTween.restart();
+        } else {
+            this.hideTutorial();
+        }
+    }
+
+    collectTrash(trash, index) {
+        if (!trash.active || this.currentPhase !== 'trash') return;
+        trash.disableInteractive();
+
+        this.clickSound.play();
+        if (trash.floatTween) trash.floatTween.stop();
+
+        // Small sparkle/splash at trash position
+        if (this.sparkleEmitter) {
+            this.sparkleEmitter.emitParticleAt(trash.x, trash.y, 4);
         }
 
+        // Float up a short distance, then fly off to the left of the screen
+        this.tweens.add({
+            targets: trash,
+            y: trash.y - 35,
+            scaleX: trash.scaleX * 1.15,
+            scaleY: trash.scaleY * 1.15,
+            duration: 180,
+            ease: 'Back.easeOut',
+            onComplete: () => {
+                this.tweens.add({
+                    targets: trash,
+                    x: -200,
+                    y: trash.y - 50,
+                    rotation: Phaser.Math.DegToRad(-45),
+                    alpha: 0.6,
+                    duration: 420,
+                    ease: 'Sine.easeIn',
+                    onComplete: () => {
+                        trash.destroy();
+                        this.trashItems[index] = null;
+                        this.remainingTrash--;
 
+                        if (this.remainingTrash <= 0) {
+                            this.drainWater();
+                        } else {
+                            this.updateTrashTutorialHand();
+                        }
+                    }
+                });
+            }
+        });
+    }
 
+    drainWater() {
+        this.currentPhase = 'drain';
+        this.hideTutorial();
 
-        this.mudCanvas = this.textures.createCanvas('mud_canvas_tex', this.dirtyCanvasW, this.dirtyCanvasH);
-        this.mudCtx = this.mudCanvas.context;
-        this.mudCtx.drawImage(dirtySource, 0, 0);
-        this.mudCanvas.refresh();
+        if (this.promptText) {
+            this.promptText.setText('DRAINING WATER...');
+            this.promptText.setColor('#00ffff');
+        }
 
-        this.trophyMud = this.add.image(this.trophyX, this.trophyY, 'mud_canvas_tex');
-        this.trophyMud.setDepth(10);
-        this.trophyMud.setDisplaySize(this.trophyDisplayW, this.trophyDisplayH);
+        this.sparkleSound.play();
 
-        // Yellow pulsating hint for unwashed dirty areas (Depth 11)
-        this.trophyMudHint = this.add.image(this.trophyX, this.trophyY, 'mud_canvas_tex');
-        this.trophyMudHint.setDepth(11);
-        this.trophyMudHint.setDisplaySize(this.trophyDisplayW, this.trophyDisplayH);
-        this.trophyMudHint.setTint(0xffea00);
-        this.trophyMudHint.setBlendMode('ADD');
-        this.trophyMudHint.setAlpha(0);
+        // Stop idle wave tween to avoid animation conflict
+        if (this.waterWaveTween) {
+            this.waterWaveTween.stop();
+        }
 
-        this.dirtyHintTween = null;
-        this.hintTimer = null;
+        // Gentle, gradual water drainage animation
+        this.tweens.add({
+            targets: this.waterLayer,
+            scaleX: 0,
+            scaleY: 0,
+            alpha: 0.15,
+            duration: 1500,
+            ease: 'Sine.easeInOut',
+            onComplete: () => {
+                if (this.waterLayer) {
+                    this.waterLayer.setVisible(false);
+                }
+                this.time.delayedCall(200, () => {
+                    this.startSoapPhase();
+                });
+            }
+        });
 
-        // Sample points grid to accurately track cleaning percentage
+        // Whirlpool bubbles at drainage center
+        this.time.addEvent({
+            delay: 120,
+            repeat: 11,
+            callback: () => {
+                if (this.bubbleEmitter) {
+                    const bx = this.poolX + Phaser.Math.Between(-30, 30);
+                    const by = this.poolY + Phaser.Math.Between(-15, 15);
+                    this.bubbleEmitter.emitParticleAt(bx, by, 1);
+                }
+            }
+        });
+    }
+
+    startSoapPhase() {
+        this.currentPhase = 'soap';
+        this.progress = 0;
+        this.cleanedPointsCount = 0;
         this.initProgressGrid();
+        this.setFillAmount(0);
+        this.percentText.setText('0%');
+
+        if (this.promptText) {
+            this.promptText.setText('SWIPE TO SOAP UP!');
+            this.promptText.setColor('#ffea75');
+        }
+
+        // Configure tool for gun_nozzle (used first)
+        this.gunNozzle.setTexture('gun_nozzle');
+        this.waterStreamEmitter = this.waterStreamEmitter_nozzle;
+        this.currentStreamOffsetY = this.streamOffsetY_nozzle;
+        this.currentCleanRadius = this.cleanRadius_nozzle;
+        if (this.gunPipe) this.gunPipe.setVisible(false);
+
+        // In soap phase, poolSoap is underneath the dirty canvas
+        if (this.poolSoap) this.poolSoap.setVisible(true);
+
+        // Slide gun up from bottom
+        this.gunContainer.setPosition(this.gameWidth * 0.5, this.gameHeight + 400);
+        this.tweens.add({
+            targets: this.gunContainer,
+            y: this.gameHeight * 0.88,
+            duration: 650,
+            ease: 'Back.easeOut',
+            onComplete: () => {
+                this.canClean = true;
+                this.showSwipeTutorial();
+            }
+        });
+    }
+
+    startWashPhase() {
+        this.currentPhase = 'wash';
+        this.canClean = false;
+        this.progress = 0;
+        this.cleanedPointsCount = 0;
+        this.initProgressGrid();
+        this.setFillAmount(0);
+        this.percentText.setText('0%');
+
+        if (this.promptText) {
+            this.promptText.setText('POWER WASH TO CLEAN!');
+            this.promptText.setColor('#00ffff');
+        }
+
+        // Hide intermediate poolSoap so poolClean underneath is revealed when erasing soap canvas
+        if (this.poolSoap) {
+            this.poolSoap.setVisible(false);
+        }
+
+        // Setup soap canvas on top of pool_clean
+        const sourceSoap = this.textures.get('pool_soap').getSourceImage();
+        this.eraseCtx.globalCompositeOperation = 'source-over';
+        this.eraseCtx.drawImage(sourceSoap, 0, 0);
+        this.eraseCanvas.refresh();
+
+        // Switch to gun_nozzle1 (used second)
+        this.gunNozzle.setTexture('gun_nozzle1');
+        this.waterStreamEmitter = this.waterStreamEmitter_nozzle1;
+        this.currentStreamOffsetY = this.streamOffsetY_nozzle1;
+        this.currentCleanRadius = this.cleanRadius_nozzle1;
+        if (this.gunPipe) this.gunPipe.setVisible(true);
+
+        // Slide gun up again
+        this.gunContainer.setPosition(this.gameWidth * 0.5, this.gameHeight + 400);
+        this.tweens.add({
+            targets: this.gunContainer,
+            y: this.gameHeight * 0.88,
+            duration: 600,
+            ease: 'Back.easeOut',
+            onComplete: () => {
+                this.canClean = true;
+                this.showSwipeTutorial();
+            }
+        });
     }
 
     initProgressGrid() {
         this.gridCols = 16;
-        this.gridRows = 32;
+        this.gridRows = 20;
         this.samplePoints = [];
 
         for (let r = 0; r < this.gridRows; r++) {
             for (let c = 0; c < this.gridCols; c++) {
                 const u = (c + 0.5) / this.gridCols;
                 const v = (r + 0.5) / this.gridRows;
-
-                const relX = (u - 0.5) * 2; // -1 to 1
-
-                let maxRelX = 0.55;
-                if (v < 0.28) {
-                    maxRelX = 0.75; // Ball top
-                } else if (v < 0.65) {
-                    maxRelX = 0.45; // Neck
-                } else {
-                    maxRelX = 0.65; // Base
-                }
-
-                if (Math.abs(relX) <= maxRelX) {
-                    this.samplePoints.push({ u, v, cleaned: false });
-                }
+                this.samplePoints.push({ u, v, cleaned: false });
             }
         }
         this.totalPoints = this.samplePoints.length;
@@ -269,7 +483,6 @@ export class GameScene extends Phaser.Scene {
     }
 
     setupEffects() {
-        // Water beam graphic (cleared, using particle funnel instead)
         this.waterGraphics = this.add.graphics();
         this.waterGraphics.setDepth(14);
 
@@ -288,7 +501,6 @@ export class GameScene extends Phaser.Scene {
         this.waterStreamEmitter_nozzle.setDepth(16);
 
         // === WATER FUNNEL STREAM PARTICLES CHO DỤNG CỤ 2 (gun_nozzle1) ===
-        // Bạn có thể tùy chỉnh các thông số tia nước riêng cho gun_nozzle1 tại đây:
         this.waterStreamEmitter_nozzle1 = this.add.particles(0, 0, 'water', {
             speed: { min: 450, max: 700 },
             angle: { min: -115, max: -65 },
@@ -302,23 +514,16 @@ export class GameScene extends Phaser.Scene {
         });
         this.waterStreamEmitter_nozzle1.setDepth(16);
 
-        // === ĐIỀU CHỈNH VỊ TRÍ THEO CHIỀU Y CỦA TIA NƯỚC CHO TỪNG DỤNG CỤ (pixel) ===
-        // Giá trị âm: dời tia nước lên trên
-        // Giá trị dương: dời tia nước xuống dưới
         this.streamOffsetY_nozzle = 0;    // Dành cho gun_nozzle
-        this.streamOffsetY_nozzle1 = 50;   // Dành cho gun_nozzle1 (chỉnh tùy ý tại đây)
-
-        // === ĐIỀU CHỈNH BÁN KÍNH LÀM SẠCH (CLEAN RADIUS) CHO TỪNG DỤNG CỤ (pixel) ===
-        // Giá trị càng lớn thì diện tích làm sạch mỗi lần xịt càng rộng
+        this.streamOffsetY_nozzle1 = 50;   // Dành cho gun_nozzle1
         this.cleanRadius_nozzle = 45;     // Dành cho gun_nozzle (mặc định 45px)
-        this.cleanRadius_nozzle1 = 55;    // Dành cho gun_nozzle1 (chỉnh tùy ý tại đây, vd: 60px hoặc 35px)
+        this.cleanRadius_nozzle1 = 55;    // Dành cho gun_nozzle1
 
-        // Con trỏ trỏ tới emitter, offset Y và bán kính làm sạch của dụng cụ đang dùng
         this.waterStreamEmitter = this.waterStreamEmitter_nozzle;
         this.currentStreamOffsetY = this.streamOffsetY_nozzle;
         this.currentCleanRadius = this.cleanRadius_nozzle;
 
-        // === WATER IMPACT — drops bursting at hit target (Depth 18) ===
+        // Water impact splash drops (Depth 18)
         this.waterEmitter = this.add.particles(0, 0, 'water', {
             speed: { min: 80, max: 220 },
             angle: { min: 0, max: 360 },
@@ -327,13 +532,11 @@ export class GameScene extends Phaser.Scene {
             lifespan: 500,
             gravityY: 200,
             tint: [0xaaeeff, 0xddf5ff, 0xffffff, 0x88ccff],
-            frequency: 80,
-            quantity: 2,
             emitting: false
         });
         this.waterEmitter.setDepth(18);
 
-        // === SECOND LAYER — mist splash (Depth 15) ===
+        // Mist splash (Depth 15)
         this.waterMistEmitter = this.add.particles(0, 0, 'water', {
             speed: { min: 60, max: 160 },
             angle: { min: 0, max: 360 },
@@ -342,13 +545,11 @@ export class GameScene extends Phaser.Scene {
             lifespan: 600,
             gravityY: 150,
             tint: [0xccf0ff, 0xeefaff, 0xffffff],
-            frequency: 70,
-            quantity: 2,
             emitting: false
         });
         this.waterMistEmitter.setDepth(15);
 
-        // === SOFT GLOW at impact point (Depth 13) ===
+        // Soft glow at impact (Depth 13)
         this.sprayDomeGlow = this.add.image(0, 0, 'radial_glow');
         this.sprayDomeGlow.setDepth(13);
         this.sprayDomeGlow.setTint(0x88ddff);
@@ -357,19 +558,19 @@ export class GameScene extends Phaser.Scene {
         this.sprayDomeGlow.setBlendMode('ADD');
         this.sprayDomeGlow.setVisible(false);
 
-        // === BUBBLE PARTICLES — bubbles floating upwards naturally at world spawn positions (Depth 17) ===
+        // Bubble particles (Depth 17)
         this.bubbleEmitter = this.add.particles(0, 0, 'bubble', {
             speed: { min: 40, max: 90 },
-            angle: { min: -130, max: -50 }, // Float upwards naturally
+            angle: { min: -130, max: -50 },
             scale: { min: 0.25, max: 0.45 },
             alpha: { start: 0.9, end: 0 },
             lifespan: { min: 900, max: 1500 },
-            gravityY: -60, // Float up smoothly
+            gravityY: -60,
             emitting: false
         });
         this.bubbleEmitter.setDepth(17);
 
-        // Sparkle particles for victory (Depth 20)
+        // Sparkle particles (Depth 20)
         this.sparkleEmitter = this.add.particles(0, 0, 'sparkle', {
             speed: { min: 40, max: 150 },
             scale: { start: 0.25, end: 0 },
@@ -388,7 +589,7 @@ export class GameScene extends Phaser.Scene {
         this.gunContainer = this.add.container(width * 0.5, height + 500);
         this.gunContainer.setDepth(25);
 
-        // Water pipe attached to nozzle handle going down
+        // Water pipe attached to nozzle handle going down (visible for gun_nozzle1)
         this.gunPipe = this.add.image(0, 0, 'water_pipe');
         this.gunPipe.setOrigin(0.5, 0.04);
         this.gunPipe.setScale(1.2, 1.0);
@@ -400,8 +601,7 @@ export class GameScene extends Phaser.Scene {
         this.gunNozzle.setScale(gunScale);
 
         this.gunContainer.add([this.gunPipe, this.gunNozzle]);
-        // Distance from pivot (0.95) to nozzle tip (0.05)
-        this.gunTipOffset = 400 * 0.90 * gunScale; // ~245px
+        this.gunTipOffset = 400 * 0.90 * gunScale;
 
         const initAngle = Phaser.Math.DegToRad(-90);
         this.gunContainer.setRotation(initAngle + Math.PI / 2);
@@ -411,7 +611,7 @@ export class GameScene extends Phaser.Scene {
         const { width, height } = this.scale;
 
         this.topUI = this.add.container(width / 2, Math.max(50, height * 0.08));
-        this.topUI.setDepth(30);
+        this.topUI.setDepth(35);
 
         this.progressBarBg = this.add.image(0, 5, 'progress_bg');
         this.progressBarBg.setDisplaySize(240, 8);
@@ -435,7 +635,7 @@ export class GameScene extends Phaser.Scene {
         }).setOrigin(0.5);
         this.topUI.add(this.percentText);
 
-        this.promptText = this.add.text(0, 35, 'CHOOSE TOOL', {
+        this.promptText = this.add.text(0, 35, 'TAP TO REMOVE TRASH!', {
             fontFamily: 'Arial, sans-serif',
             fontSize: '18px',
             fontStyle: 'bold',
@@ -456,166 +656,53 @@ export class GameScene extends Phaser.Scene {
         });
     }
 
-    setupToolSelection() {
-        const { width, height } = this.scale;
+    setupTutorial() {
+        const width = this.gameWidth;
+        const height = this.gameHeight;
 
-        this.toolSelectionContainer = this.add.container(0, 0);
-        this.toolSelectionContainer.setDepth(35);
+        this.tutorialContainer = this.add.container(width * 0.5, height * 0.5);
+        this.tutorialContainer.setDepth(30);
+        this.tutorialContainer.setVisible(false);
 
-        const leftX = width * 0.28;
-        const leftY = height * 0.82;
-        const rightX = width * 0.72;
-        const rightY = height * 0.82;
+        this.tutorialHand = this.add.image(0, 0, 'hand');
+        this.tutorialHand.setScale(0.52);
+        this.tutorialContainer.add(this.tutorialHand);
 
-        const btnLeft = this.createToolButton(leftX, leftY, 'gun_nozzle');
-        const btnRight = this.createToolButton(rightX, rightY, 'gun_nozzle1');
-
-        this.toolButtons = [btnLeft, btnRight];
-        this.toolSelectionContainer.add([btnLeft, btnRight]);
-
-        // Hand tutorial for tool selection
-        this.toolTutorialHand = this.add.image(leftX + 15, leftY + 25, 'hand');
-        this.toolTutorialHand.setScale(0.5);
-        this.toolTutorialHand.setDepth(36);
-        this.toolSelectionContainer.add(this.toolTutorialHand);
-
-        // Chuỗi animation: nhấp nháy/tap tại nút trái -> lướt sang phải -> nhấp nháy/tap tại nút phải -> lướt về trái
-        this.toolHandTween = this.tweens.chain({
-            targets: this.toolTutorialHand,
-            loop: -1,
-            tweens: [
-                // 1. Nhấp nhấp tại nút bên trái (tap 2 lần)
-                {
-                    scaleX: 0.40,
-                    scaleY: 0.40,
-                    duration: 180,
-                    yoyo: true,
-                    repeat: 1,
-                    ease: 'Sine.easeInOut'
-                },
-                // 2. Di chuyển từ nút trái sang nút phải
-                {
-                    x: rightX + 15,
-                    y: rightY + 25,
-                    duration: 750,
-                    ease: 'Sine.easeInOut'
-                },
-                // 3. Nhấp nhấp tại nút bên phải (tap 2 lần)
-                {
-                    scaleX: 0.40,
-                    scaleY: 0.40,
-                    duration: 180,
-                    yoyo: true,
-                    repeat: 1,
-                    ease: 'Sine.easeInOut'
-                },
-                // 4. Di chuyển từ nút phải về lại nút trái
-                {
-                    x: leftX + 15,
-                    y: leftY + 25,
-                    duration: 750,
-                    ease: 'Sine.easeInOut'
-                }
-            ]
-        });
-    }
-
-    createToolButton(x, y, toolKey) {
-        const btnContainer = this.add.container(x, y);
-
-        // Background button frame
-        const bg = this.add.image(0, 0, 'btn_tool');
-        bg.setScale(0.8);
-        btnContainer.add(bg);
-
-        // Tool preview image inside button (only gun_nozzle / gun_nozzle1, no water pipe on UI)
-        const toolImg = this.add.image(0, -5, toolKey);
-        toolImg.setScale(0.2);
-        toolImg.setRotation(Phaser.Math.DegToRad(-25));
-        btnContainer.add(toolImg);
-
-        // Make button interactive
-        bg.setInteractive({ useHandCursor: true });
-        bg.on('pointerdown', (pointer) => {
-            if (pointer && pointer.event) {
-                pointer.event.stopPropagation();
-            }
-            this.selectTool(toolKey, btnContainer);
-        });
-
-        // Breathing pulse animation
-        this.tweens.add({
-            targets: btnContainer,
-            scaleX: 1.08,
-            scaleY: 1.08,
+        this.tutorialTween = this.tweens.add({
+            targets: this.tutorialHand,
+            scaleX: 0.42,
+            scaleY: 0.42,
             yoyo: true,
             repeat: -1,
-            duration: 700,
+            duration: 350,
             ease: 'Sine.easeInOut'
         });
-
-        return btnContainer;
     }
 
-    selectTool(toolKey, selectedBtn) {
-        if (this.hasSelectedTool) return;
-        this.hasSelectedTool = true;
+    showSwipeTutorial() {
+        if (this.isGameEnd || !this.canClean || !this.tutorialContainer) return;
+        this.tutorialContainer.setVisible(true);
+        this.tutorialContainer.setPosition(this.poolX, this.poolY + 30);
 
-        this.clickSound.play();
+        if (this.tutorialTween) this.tutorialTween.stop();
+        this.tutorialHand.setScale(0.52);
 
-        // Update gun nozzle texture to the chosen tool
-        this.gunNozzle.setTexture(toolKey);
-
-        this.toolKey = toolKey;
-
-        // Gán waterStreamEmitter, streamOffsetY và cleanRadius tương ứng với dụng cụ được chọn
-        if (toolKey === 'gun_nozzle1') {
-            this.waterStreamEmitter = this.waterStreamEmitter_nozzle1;
-            this.currentStreamOffsetY = this.streamOffsetY_nozzle1;
-            this.currentCleanRadius = this.cleanRadius_nozzle1;
-            this.gunPipe.setVisible(true);
-        } else {
-            this.waterStreamEmitter = this.waterStreamEmitter_nozzle;
-            this.currentStreamOffsetY = this.streamOffsetY_nozzle;
-            this.currentCleanRadius = this.cleanRadius_nozzle;
-            this.gunPipe.setVisible(false);
-        }
-
-        // Disappear tool selection UI with smooth animation
-        if (this.toolSelectionContainer) {
-            this.tweens.add({
-                targets: this.toolSelectionContainer,
-                alpha: 0,
-                scaleX: 0.8,
-                scaleY: 0.8,
-                duration: 250,
-                ease: 'Back.easeIn',
-                onComplete: () => {
-                    if (this.toolSelectionContainer) {
-                        this.toolSelectionContainer.destroy();
-                        this.toolSelectionContainer = null;
-                    }
-                }
-            });
-        }
-
-        // Reset prompt text
-        if (this.promptText) {
-            this.promptText.setText('');
-        }
-
-        // Slide gun up into view from bottom
-        this.gunContainer.setPosition(this.gameWidth * 0.5, this.gameHeight + 400);
-        this.tweens.add({
-            targets: this.gunContainer,
-            y: this.gameHeight * 0.9,
-            duration: 650,
-            ease: 'Back.easeOut',
-            onComplete: () => {
-                this.canClean = true;
-                this.showTutorial();
-            }
+        this.tutorialTween = this.tweens.add({
+            targets: this.tutorialHand,
+            x: { from: -80, to: 80 },
+            y: { from: 20, to: -20 },
+            yoyo: true,
+            repeat: -1,
+            duration: 800,
+            ease: 'Sine.easeInOut'
         });
+    }
+
+    hideTutorial() {
+        if (this.tutorialContainer && this.tutorialContainer.visible) {
+            this.tutorialContainer.setVisible(false);
+            if (this.tutorialTween) this.tutorialTween.stop();
+        }
     }
 
     setupCameras() {
@@ -624,26 +711,23 @@ export class GameScene extends Phaser.Scene {
         this.uiCamera = this.cameras.add(0, 0, width, height);
         this.uiCamera.setZoom(1.0);
 
-        // Main Camera ignores UI
+        // Main camera ignores UI
         const uiElements = [this.topUI];
-        if (this.toolSelectionContainer) uiElements.push(this.toolSelectionContainer);
         if (this.ctaBtn) uiElements.push(this.ctaBtn);
-        this.cameras.main.ignore(uiElements);
+        this.cameras.main.ignore(uiElements.filter(Boolean));
 
-        // UI Camera ignores World objects
+        // UI camera ignores world elements
         const worldElements = [
             this.bg,
-            this.trophyClean,
-            this.trophyWet,
-            this.trophyMud,
-            this.trophyMudHint,
-            this.trophyGlow,
-            this.trophyShadow,
+            this.poolClean,
+            this.poolSoap,
+            this.poolCanvasImg,
+            this.poolGlow,
+            this.waterLayer,
+            ...this.trashItems,
             this.waterGraphics,
             this.waterStreamEmitter_nozzle,
             this.waterStreamEmitter_nozzle1,
-            this.waterDropsEmitter,
-            this.waterCoreEmitter,
             this.waterEmitter,
             this.waterMistEmitter,
             this.bubbleEmitter,
@@ -667,75 +751,9 @@ export class GameScene extends Phaser.Scene {
         });
     }
 
-    setupTutorial() {
-        const width = this.gameWidth;
-        const height = this.gameHeight;
-
-        this.tutorialContainer = this.add.container(width * 0.72, height * 0.78);
-        this.tutorialContainer.setDepth(28);
-        this.tutorialContainer.setVisible(false);
-
-        this.tutorialHand = this.add.image(0, 0, 'hand');
-        this.tutorialHand.setScale(0.55);
-        this.tutorialContainer.add(this.tutorialHand);
-
-        this.tutorialTween = this.tweens.add({
-            targets: this.tutorialHand,
-            x: { from: 10, to: -60 },
-            y: { from: -160, to: -320 },
-            yoyo: true,
-            repeat: -1,
-            duration: 1100,
-            ease: 'Sine.easeInOut'
-        });
-
-        this.tutorialTimer = null;
-    }
-
-    hideTutorial() {
-        if (this.tutorialContainer && this.tutorialContainer.visible) {
-            this.tutorialContainer.setVisible(false);
-            if (this.tutorialTween) this.tutorialTween.pause();
-        }
-    }
-
-    showTutorial() {
-        if (this.isGameEnd || !this.canClean || !this.tutorialContainer) return;
-        this.tutorialContainer.setVisible(true);
-        if (this.tutorialTween) this.tutorialTween.resume();
-    }
-
-    startDirtyHint() {
-        if (!this.hasStartedInteracting || !this.canClean || this.isGameEnd || !this.trophyMudHint) return;
-        if (this.dirtyHintTween) {
-            this.dirtyHintTween.stop();
-        }
-        this.trophyMudHint.setAlpha(0);
-        this.dirtyHintTween = this.tweens.add({
-            targets: this.trophyMudHint,
-            alpha: 0.65,
-            duration: 650,
-            yoyo: true,
-            repeat: -1,
-            ease: 'Sine.easeInOut'
-        });
-    }
-
-    stopDirtyHint() {
-        if (this.dirtyHintTween) {
-            this.dirtyHintTween.stop();
-            this.dirtyHintTween = null;
-        }
-        if (this.trophyMudHint) {
-            this.trophyMudHint.setAlpha(0);
-        }
-    }
-
     createProceduralWaterSound() {
         if (!this.sound.context) return;
         const ctx = this.sound.context;
-        
-        // Tạo buffer tiếng ồn (Pink / Brown noise) cho âm thanh dòng nước áp lực cao
         const bufferSize = ctx.sampleRate * 2;
         const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
         const output = noiseBuffer.getChannelData(0);
@@ -760,8 +778,6 @@ export class GameScene extends Phaser.Scene {
         }
         if (!this.isAudioPlaying) {
             this.isAudioPlaying = true;
-
-            // 2. Tạo âm thanh dòng nước áp lực cao (Web Audio Synthesis)
             try {
                 const ctx = this.sound.context;
                 if (ctx) {
@@ -773,13 +789,11 @@ export class GameScene extends Phaser.Scene {
                         this.proceduralSource.buffer = this.proceduralNoiseBuffer;
                         this.proceduralSource.loop = true;
 
-                        // Bandpass filter tạo tiếng xịt nước rít và sôi động (1.6kHz)
                         this.proceduralFilter = ctx.createBiquadFilter();
                         this.proceduralFilter.type = 'bandpass';
                         this.proceduralFilter.frequency.value = 1600;
                         this.proceduralFilter.Q.value = 1.6;
 
-                        // Lowpass filter tạo tiếng ầm ầm của tia nước áp lực
                         this.proceduralFilter2 = ctx.createBiquadFilter();
                         this.proceduralFilter2.type = 'lowpass';
                         this.proceduralFilter2.frequency.value = 3400;
@@ -797,16 +811,13 @@ export class GameScene extends Phaser.Scene {
                         this.proceduralSource.start();
                     }
                 }
-            } catch (e) {
-                // Fallback nếu Web Audio bị hạn chế
-            }
+            } catch (e) {}
         }
     }
 
     stopSpraySound() {
         if (this.isAudioPlaying) {
             this.isAudioPlaying = false;
-
             try {
                 if (this.proceduralGain && this.sound.context) {
                     const ctx = this.sound.context;
@@ -829,25 +840,18 @@ export class GameScene extends Phaser.Scene {
 
     setupInput() {
         this.input.on('pointerdown', (pointer) => {
-            if (this.isGameEnd || !this.canClean) {
-                return;
-            }
-            this.hasStartedInteracting = true; // Người chơi đã bắt đầu dùng dụng cụ lần đầu
+            if (this.isGameEnd || !this.canClean) return;
+
+            this.hasStartedInteracting = true;
             this.hideTutorial();
-            this.stopDirtyHint();
-            if (this.tutorialTimer) this.tutorialTimer.remove();
-            if (this.hintTimer) this.hintTimer.remove();
 
             this.isSpraying = true;
             this.startSpraySound();
 
-            // Smoothly zoom in to 1.2x wider view
             this.setCameraZoomSmooth(1 / 1.2, 700);
 
             this.lastCanvasX = null;
             this.lastCanvasY = null;
-            this.lastU = null;
-            this.lastV = null;
             this.handleSpray(pointer.worldX, pointer.worldY);
         });
 
@@ -863,206 +867,162 @@ export class GameScene extends Phaser.Scene {
             this.stopSpraySound();
             this.lastCanvasX = null;
             this.lastCanvasY = null;
-            this.lastU = null;
-            this.lastV = null;
 
-            // Smoothly zoom back out to initial 1.4x wider view
             if (!this.isGameEnd) {
                 this.setCameraZoomSmooth(1 / 1.4, 700);
             }
 
             this.targetShiftX = 0;
-            this.targetBgShiftX = 0;
-
             this.waterGraphics.clear();
             this.waterStreamEmitter.stop();
-            if (this.waterDropsEmitter) this.waterDropsEmitter.stop();
-            if (this.waterCoreEmitter) this.waterCoreEmitter.stop();
             this.waterEmitter.stop();
             this.waterMistEmitter.stop();
             if (this.bubbleEmitter) this.bubbleEmitter.stop();
             if (this.sprayDomeGlow) this.sprayDomeGlow.setVisible(false);
 
-            if (!this.isGameEnd) {
+            if (!this.isGameEnd && this.canClean) {
                 this.tutorialTimer = this.time.delayedCall(2000, () => {
-                    this.showTutorial();
-                });
-                this.hintTimer = this.time.delayedCall(800, () => {
-                    this.startDirtyHint();
+                    this.showSwipeTutorial();
                 });
             }
         });
     }
 
     handleSpray(pointerX, pointerY) {
-        if (this.isGameEnd) return;
+        if (this.isGameEnd || !this.canClean) return;
 
-        // Position the tool directly at the player's touch / cursor
         const gunBaseX = pointerX;
         const gunBaseY = pointerY + 100;
-
         this.gunContainer.setPosition(gunBaseX, gunBaseY);
 
-        // Center-based smooth tilt: Straight UP (-90 deg) at center, smoothly tilts left/right based on position
         const centerX = this.gameWidth / 2;
-        const offsetFromCenter = (gunBaseX - centerX) / (centerX * 1.1); // -1 (left) to +1 (right)
+        const offsetFromCenter = (gunBaseX - centerX) / (centerX * 1.1);
         const clampedOffset = Phaser.Math.Clamp(offsetFromCenter, -1, 1);
 
-        // Vị trí chính giữa làm neo (Anchor): chỉ khi đưa hẳn sang 2 bên (vượt qua deadzone) mới dịch chuyển
-        const deadZone = 35; // Vùng neo giữ cố định ở trung tâm (px)
+        const deadZone = 35;
         const diffX = gunBaseX - centerX;
-        const MAX_SHIFT_X = 20; // Giới hạn dịch chuyển đồng bộ cho đồ vật, shadow và background (px)
+        const MAX_SHIFT_X = 20;
 
         if (Math.abs(diffX) > deadZone) {
             const availableRange = centerX - deadZone;
             const sign = Math.sign(diffX);
             const rawRatio = (Math.abs(diffX) - deadZone) / (availableRange * 0.9);
             const clampedRatio = Phaser.Math.Clamp(rawRatio, 0, 1);
-            
-            // Đường cong mượt để tăng dần độ dịch khi đẩy xa ra 2 biên
             const smoothRatio = Math.pow(clampedRatio, 1.4);
-
-            // Đồng bộ dịch chuyển cho toàn bộ đối tượng
             this.targetShiftX = -sign * smoothRatio * MAX_SHIFT_X;
         } else {
-            // Nằm trong vùng neo chính giữa -> giữ nguyên vị trí gốc
             this.targetShiftX = 0;
         }
-        
-        // Smooth gentle tilt (up to +/- 18 degrees) without jitter
+
         const angleDeg = -90 + clampedOffset * 18;
         const angle = Phaser.Math.DegToRad(angleDeg);
-
         this.gunContainer.setRotation(angle + Math.PI / 2);
 
-        // Nozzle tip coordinates
         const tipX = gunBaseX + Math.cos(angle) * this.gunTipOffset;
         const tipY = gunBaseY + Math.sin(angle) * this.gunTipOffset;
 
-        // Water jet impact point ahead of the nozzle tip
         const jetLength = 150;
         const hitX = tipX + Math.cos(angle) * jetLength;
         const hitY = tipY + Math.sin(angle) * jetLength;
 
-        // Clear graphics
         this.waterGraphics.clear();
 
-        // Stream particles: shoot from nozzle tip expanding outwards like a funnel
         const angleDeg2 = Phaser.Math.RadToDeg(angle);
-
-        // Expanding funnel stream (áp dụng streamOffsetY)
         this.waterStreamEmitter.setPosition(tipX, tipY + (this.currentStreamOffsetY || 0));
         this.waterStreamEmitter.setEmitterAngle({ min: angleDeg2 - 18, max: angleDeg2 + 18 });
         if (!this.waterStreamEmitter.emitting) this.waterStreamEmitter.start();
 
-        // Impact particles at hit point (emitted in world space, independent of tool movement)
-        const now = this.time.now;
-        if (this.waterEmitter && (now - this.lastWaterSplashTime > 40)) {
-            this.lastWaterSplashTime = now;
-            this.waterEmitter.emitParticleAt(hitX, hitY, 2);
-        }
+        const poolLeft = this.poolX - this.poolDisplayW / 2;
+        const poolTop = this.poolY - this.poolDisplayH / 2;
 
-        if (this.waterMistEmitter && (now - this.lastMistTime > 50)) {
-            this.lastMistTime = now;
-            this.waterMistEmitter.emitParticleAt(hitX, hitY, 2);
-        }
+        const curCanvasX = ((hitX - poolLeft) / this.poolDisplayW) * this.canvasW;
+        const curCanvasY = ((hitY - poolTop) / this.poolDisplayH) * this.canvasH;
 
-        // Bubble particles floating upwards naturally at world hit location (independent of tool movement)
-        if (this.bubbleEmitter && (now - this.lastBubbleTime > 55)) {
-            this.lastBubbleTime = now;
-            const spreadX = hitX + Phaser.Math.Between(-15, 15);
-            const spreadY = hitY + Phaser.Math.Between(-10, 10);
-            this.bubbleEmitter.emitParticleAt(spreadX, spreadY, Phaser.Math.Between(1, 2));
-        }
+        const curU = (hitX - poolLeft) / this.poolDisplayW;
+        const curV = (hitY - poolTop) / this.poolDisplayH;
 
-        // Glow at impact
-        if (this.sprayDomeGlow) {
-            this.sprayDomeGlow.setPosition(hitX, hitY);
-            this.sprayDomeGlow.setVisible(true);
-        }
+        const cleanRadius = this.currentCleanRadius || 48;
+        const eraseCanvasRadius = cleanRadius * (this.canvasW / this.poolDisplayW);
 
-        // Emit water particles at impact point
+        // Check if hitting pool bounds
+        const isHittingPool = (
+            hitX >= poolLeft - 20 && hitX <= poolLeft + this.poolDisplayW + 20 &&
+            hitY >= poolTop - 20 && hitY <= poolTop + this.poolDisplayH + 20
+        );
 
-        // Calculate position relative to trophy
-        const trophyLeft = this.trophyX - this.trophyDisplayW / 2;
-        const trophyTop = this.trophyY - this.trophyDisplayH / 2;
+        if (isHittingPool) {
+            const now = this.time.now;
 
-        const curCanvasX = ((hitX - trophyLeft) / this.trophyDisplayW) * this.dirtyCanvasW;
-        const curCanvasY = ((hitY - trophyTop) / this.trophyDisplayH) * this.dirtyCanvasH;
-
-        const curU = (hitX - trophyLeft) / this.trophyDisplayW;
-        const curV = (hitY - trophyTop) / this.trophyDisplayH;
-
-        const cleanRadius = this.currentCleanRadius || 45;
-        const eraseCanvasRadius = cleanRadius * (this.dirtyCanvasW / this.trophyDisplayW);
-
-        // Check if water impact is in or near trophy bounds
-        if (hitX >= trophyLeft - 30 && hitX <= trophyLeft + this.trophyDisplayW + 30 &&
-            hitY >= trophyTop - 30 && hitY <= trophyTop + this.trophyDisplayH + 30) {
-            
-            this.mudCtx.save();
-            this.mudCtx.globalCompositeOperation = 'destination-out';
-
-            // Connect stroke from last position for seamless erasing
-            if (this.lastCanvasX !== null && this.lastCanvasY !== null) {
-                this.mudCtx.lineWidth = eraseCanvasRadius * 2;
-                this.mudCtx.lineCap = 'round';
-                this.mudCtx.lineJoin = 'round';
-                this.mudCtx.beginPath();
-                this.mudCtx.moveTo(this.lastCanvasX, this.lastCanvasY);
-                this.mudCtx.lineTo(curCanvasX, curCanvasY);
-                this.mudCtx.stroke();
+            // Impact particles at hit point (emitted in world space, independent of tool movement)
+            if (this.waterEmitter && (now - this.lastWaterSplashTime > 40)) {
+                this.lastWaterSplashTime = now;
+                this.waterEmitter.emitParticleAt(hitX, hitY, 2);
             }
 
-            // Fill circle at current position
-            this.mudCtx.beginPath();
-            this.mudCtx.arc(curCanvasX, curCanvasY, eraseCanvasRadius, 0, Math.PI * 2);
-            this.mudCtx.fill();
-            this.mudCtx.restore();
+            if (this.waterMistEmitter && (now - this.lastMistTime > 50)) {
+                this.lastMistTime = now;
+                this.waterMistEmitter.emitParticleAt(hitX, hitY, 2);
+            }
 
-            // Refresh canvas texture to update screen immediately
-            this.mudCanvas.refresh();
+            // Bubble particles floating upwards naturally at world hit location (independent of tool movement)
+            if (this.bubbleEmitter && (now - this.lastBubbleTime > 55)) {
+                this.lastBubbleTime = now;
+                const spreadX = hitX + Phaser.Math.Between(-15, 15);
+                const spreadY = hitY + Phaser.Math.Between(-10, 10);
+                this.bubbleEmitter.emitParticleAt(spreadX, spreadY, Phaser.Math.Between(1, 2));
+            }
 
-            // Update cleaned progress across interpolated UV points
+            // Glow at impact point
+            if (this.sprayDomeGlow) {
+                this.sprayDomeGlow.setPosition(hitX, hitY);
+                this.sprayDomeGlow.setVisible(true);
+            }
+
+            // Erase canvas layer
+            this.eraseCtx.save();
+            this.eraseCtx.globalCompositeOperation = 'destination-out';
+
+            if (this.lastCanvasX !== null && this.lastCanvasY !== null) {
+                this.eraseCtx.lineWidth = eraseCanvasRadius * 2;
+                this.eraseCtx.lineCap = 'round';
+                this.eraseCtx.lineJoin = 'round';
+                this.eraseCtx.beginPath();
+                this.eraseCtx.moveTo(this.lastCanvasX, this.lastCanvasY);
+                this.eraseCtx.lineTo(curCanvasX, curCanvasY);
+                this.eraseCtx.stroke();
+            }
+
+            this.eraseCtx.beginPath();
+            this.eraseCtx.arc(curCanvasX, curCanvasY, eraseCanvasRadius, 0, Math.PI * 2);
+            this.eraseCtx.fill();
+            this.eraseCtx.restore();
+
+            this.eraseCanvas.refresh();
+
             this.checkProgressUV(curU, curV);
+        } else {
+            if (this.sprayDomeGlow) this.sprayDomeGlow.setVisible(false);
         }
 
         this.lastCanvasX = curCanvasX;
         this.lastCanvasY = curCanvasY;
-        this.lastU = curU;
-        this.lastV = curV;
     }
 
     checkProgressUV(targetU, targetV) {
-        const cleanRadius = this.currentCleanRadius || 45;
-        const radiusU = (cleanRadius / 45) * 0.16; // Tự động đồng bộ theo cleanRadius của từng dụng cụ
-        const aspect = this.trophyDisplayH / this.trophyDisplayW;
+        const radiusU = (this.currentCleanRadius / 45) * 0.15;
         let newlyCleaned = 0;
 
-        const checkPoint = (u, v) => {
-            for (let i = 0; i < this.samplePoints.length; i++) {
-                const pt = this.samplePoints[i];
-                if (!pt.cleaned) {
-                    const du = u - pt.u;
-                    const dv = (v - pt.v) * (aspect / 2.0);
-                    if (Math.hypot(du, dv) <= radiusU) {
-                        pt.cleaned = true;
-                        this.cleanedPointsCount++;
-                        newlyCleaned++;
-                    }
+        for (let i = 0; i < this.samplePoints.length; i++) {
+            const pt = this.samplePoints[i];
+            if (!pt.cleaned) {
+                const du = targetU - pt.u;
+                const dv = targetV - pt.v;
+                if (Math.hypot(du, dv) <= radiusU) {
+                    pt.cleaned = true;
+                    this.cleanedPointsCount++;
+                    newlyCleaned++;
                 }
             }
-        };
-
-        // Interpolate between last and current UV for smooth progress detection
-        if (this.lastU !== null && this.lastV !== null) {
-            const steps = Math.max(1, Math.ceil(Math.hypot(targetU - this.lastU, targetV - this.lastV) / 0.04));
-            for (let s = 0; s <= steps; s++) {
-                const t = s / steps;
-                checkPoint(this.lastU + (targetU - this.lastU) * t, this.lastV + (targetV - this.lastV) * t);
-            }
-        } else {
-            checkPoint(targetU, targetV);
         }
 
         if (newlyCleaned > 0) {
@@ -1070,95 +1030,90 @@ export class GameScene extends Phaser.Scene {
             this.progress = Math.min(100, Math.round(rawProgress));
             this.updateProgressBar();
 
-            if (this.progress % 10 === 0 || newlyCleaned > 3) {
-                const trophyLeft = this.trophyX - this.trophyDisplayW / 2;
-                const trophyTop = this.trophyY - this.trophyDisplayH / 2;
-                const sparkleX = trophyLeft + targetU * this.trophyDisplayW;
-                const sparkleY = trophyTop + targetV * this.trophyDisplayH;
-                this.sparkleEmitter.emitParticleAt(sparkleX, sparkleY, 4);
+            if (this.currentPhase === 'wash' && (this.progress % 10 === 0 || newlyCleaned > 3)) {
+                const poolLeft = this.poolX - this.poolDisplayW / 2;
+                const poolTop = this.poolY - this.poolDisplayH / 2;
+                const sx = poolLeft + targetU * this.poolDisplayW;
+                const sy = poolTop + targetV * this.poolDisplayH;
+                this.sparkleEmitter.emitParticleAt(sx, sy, 4);
             }
 
-            if (this.progress >= 99 && !this.isGameEnd) {
-                this.triggerWin();
-                this.createConfetti();
-                
-                if (typeof window.gameEnd === 'function') {
-                    window.gameEnd();
+            // Check phase completion
+            if (this.progress >= 96) {
+                if (this.currentPhase === 'soap') {
+                    this.completeSoapPhase();
+                } else if (this.currentPhase === 'wash' && !this.isGameEnd) {
+                    this.triggerWin();
+                    this.createConfetti();
+                    if (typeof window.gameEnd === 'function') {
+                        window.gameEnd();
+                    }
                 }
             }
         }
     }
 
-    updateProgressBar() {
-        //const fillW = Math.max(1, (this.progress / 100) * this.maxFillWidth);
-        //this.progressBarFill.setDisplaySize(fillW, 36);
-        const fillW = this.progress / 100;
+    completeSoapPhase() {
+        this.canClean = false;
+        this.isSpraying = false;
+        this.stopSpraySound();
+        this.waterStreamEmitter.stop();
+        if (this.bubbleEmitter) this.bubbleEmitter.stop();
+        if (this.sprayDomeGlow) this.sprayDomeGlow.setVisible(false);
 
-        this.setFillAmount(fillW);
+        // Retract gun_nozzle1
+        this.tweens.add({
+            targets: this.gunContainer,
+            y: this.gameHeight + 400,
+            duration: 500,
+            ease: 'Back.easeIn',
+            onComplete: () => {
+                this.time.delayedCall(400, () => {
+                    this.startWashPhase();
+                });
+            }
+        });
+    }
+
+    updateProgressBar() {
+        const fillRatio = this.progress / 100;
+        this.setFillAmount(fillRatio);
         this.percentText.setText(`${this.progress}%`);
     }
 
     setFillAmount(amount) {
+        amount = Phaser.Math.Clamp(amount, 0, 1);
+        const sourceWidth = this.progressBarFill.width;
+        const sourceHeight = this.progressBarFill.height;
 
-        amount = Phaser.Math.Clamp(
-            amount,
-            0,
-            1
-        );
-
-        const sourceWidth =
-            this.progressBarFill.width;
-
-        const sourceHeight =
-            this.progressBarFill.height;
-
-
-        // Crop từ trái sang phải
-        this.progressBarFill.setCrop(
-            0,
-            0,
-            sourceWidth * amount,
-            sourceHeight
-        );
+        this.progressBarFill.setCrop(0, 0, sourceWidth * amount, sourceHeight);
     }
-
 
     triggerWin() {
         this.isGameEnd = true;
         this.isSpraying = false;
         this.targetShiftX = 0;
-        this.targetBgShiftX = 0;
         this.stopSpraySound();
         this.waterGraphics.clear();
         this.waterStreamEmitter.stop();
-        if (this.waterDropsEmitter) this.waterDropsEmitter.stop();
-        if (this.waterCoreEmitter) this.waterCoreEmitter.stop();
         this.waterEmitter.stop();
+        this.waterMistEmitter.stop();
         if (this.bubbleEmitter) this.bubbleEmitter.stop();
         this.hideTutorial();
-        this.stopDirtyHint();
-        if (this.hintTimer) this.hintTimer.remove();
 
         this.progress = 100;
         this.updateProgressBar();
 
-        // Fade out mud layer completely
-        this.tweens.add({
-            targets: [this.trophyMud, this.trophyMudHint],
-            alpha: 0,
-            duration: 350
-        });
+        // Fade out any remaining canvas layer
+        if (this.poolCanvasImg) {
+            this.tweens.add({
+                targets: this.poolCanvasImg,
+                alpha: 0,
+                duration: 350
+            });
+        }
 
-        // Gradually transition wet trophy to clean golden trophy
-        this.tweens.add({
-            targets: this.trophyWet,
-            alpha: 0,
-            duration: 1200,
-            delay: 300,
-            ease: 'Sine.easeInOut'
-        });
-
-        // Retract water gun smoothly
+        // Retract water gun
         this.tweens.add({
             targets: this.gunContainer,
             y: this.gameHeight + 2500,
@@ -1166,29 +1121,28 @@ export class GameScene extends Phaser.Scene {
             ease: 'Back.easeIn'
         });
 
-        // Play Win & Sparkle sound
         this.winSound.play();
         this.sparkleSound.play();
 
-        // Golden glow animation
+        // Glow animation
         this.tweens.add({
-            targets: this.trophyGlow,
+            targets: this.poolGlow,
             alpha: 0.85,
-            scaleX: this.trophyScale * 3.2,
-            scaleY: this.trophyScale * 3.2,
+            scaleX: 2.8,
+            scaleY: 2.8,
             duration: 800,
             yoyo: true,
             repeat: -1,
             ease: 'Sine.easeInOut'
         });
 
-        // Sparkle burst around the trophy (emitted in world space)
+        // Sparkle burst across pool
         this.time.addEvent({
-            delay: 160,
+            delay: 150,
             repeat: 20,
             callback: () => {
-                const rx = this.trophyX + Phaser.Math.Between(-this.trophyDisplayW * 0.4, this.trophyDisplayW * 0.4);
-                const ry = this.trophyY + Phaser.Math.Between(-this.trophyDisplayH * 0.45, this.trophyDisplayH * 0.45);
+                const rx = this.poolX + Phaser.Math.Between(-this.poolDisplayW * 0.4, this.poolDisplayW * 0.4);
+                const ry = this.poolY + Phaser.Math.Between(-this.poolDisplayH * 0.4, this.poolDisplayH * 0.4);
                 this.sparkleEmitter.emitParticleAt(rx, ry, 6);
             }
         });
@@ -1205,7 +1159,6 @@ export class GameScene extends Phaser.Scene {
             repeat: -1
         });
 
-        // Show Endcard CTA overlay
         this.time.delayedCall(1000, () => {
             this.showEndcardOverlay();
         });
@@ -1237,8 +1190,6 @@ export class GameScene extends Phaser.Scene {
         }).setOrigin(0.5);
 
         endcard.add([bigBtn, subLabel]);
-
-        // Main camera ignores endcard overlay
         this.cameras.main.ignore(endcard);
 
         this.tweens.add({
@@ -1250,7 +1201,7 @@ export class GameScene extends Phaser.Scene {
         });
 
         this.tweens.add({
-            targets: bigBtn,
+            targets: [bigBtn, subLabel],
             scaleX: 1.05,
             scaleY: 1.05,
             duration: 600,
@@ -1258,42 +1209,23 @@ export class GameScene extends Phaser.Scene {
             repeat: -1,
             ease: 'Sine.easeInOut'
         });
-        this.tweens.add({
-            targets: subLabel,
-            scaleX: 1.05,
-            scaleY: 1.05,
-            duration: 600,
-            yoyo: true,
-            repeat: -1,
-            ease: 'Sine.easeInOut'
-        });
-
-        // this.input.on('pointerdown', () => {
-        //     this.ShowStore();
-        // });
     }
 
     update(time, delta) {
-        // Đồng bộ tốc độ chuyển động mượt mà cho toàn bộ cúp, bóng (trophyShadow) và background
         const lerpFactor = 0.06;
         this.currentShiftX += (this.targetShiftX - this.currentShiftX) * lerpFactor;
-
-        this.trophyX = this.baseTrophyX + this.currentShiftX;
+        this.poolX = this.basePoolX + this.currentShiftX;
 
         if (this.bg) {
             this.bg.x = this.baseBgX + this.currentShiftX;
         }
 
-        if (this.trophyShadow) {
-            this.trophyShadow.x = this.trophyX;
-        }
-
-        if (this.trophyClean) {
-            this.trophyClean.x = this.trophyX;
-            if (this.trophyWet) this.trophyWet.x = this.trophyX;
-            if (this.trophyMud) this.trophyMud.x = this.trophyX;
-            if (this.trophyMudHint) this.trophyMudHint.x = this.trophyX;
-            if (this.trophyGlow) this.trophyGlow.x = this.trophyX;
+        if (this.poolClean) {
+            this.poolClean.x = this.poolX;
+            if (this.poolSoap) this.poolSoap.x = this.poolX;
+            if (this.poolCanvasImg) this.poolCanvasImg.x = this.poolX;
+            if (this.poolGlow) this.poolGlow.x = this.poolX;
+            if (this.waterLayer) this.waterLayer.x = this.poolX;
         }
     }
 
@@ -1306,69 +1238,37 @@ export class GameScene extends Phaser.Scene {
             this.uiCamera.setSize(width, height);
         }
 
-        this.baseTrophyX = width / 2;
-        this.baseBgX = width / 2 - 10;
-        this.baseTrophyY = height * 0.48;
-        this.baseBgY = height / 2;
-        this.trophyY = this.baseTrophyY + this.currentShiftY;
-        this.trophyX = this.baseTrophyX + this.currentShiftX;
+        this.basePoolX = width / 2;
+        this.baseBgX = width / 2;
+        this.basePoolY = height * 0.44;
+        this.baseBgY = height * 0.35;
+        this.poolX = this.basePoolX + this.currentShiftX;
 
-        this.resizeBackground();
+        const targetPoolHeight = Math.min(height * 0.52, 480);
+        const sourceDirty = this.textures.get('pool_dirty').getSourceImage();
+        const aspect = sourceDirty.width / sourceDirty.height;
+        this.poolDisplayH = targetPoolHeight;
+        this.poolDisplayW = targetPoolHeight * aspect;
 
-        const targetTrophyHeight = Math.min(height * 0.58, 540);
-        const scale = targetTrophyHeight / 1024;
-        this.trophyScale = scale;
-        this.trophyDisplayW = 492 * scale;
-        this.trophyDisplayH = 1024 * scale;
-
-        if (this.trophyClean) {
-            this.trophyClean.setPosition(this.trophyX, this.trophyY).setDisplaySize(this.trophyDisplayW, this.trophyDisplayH);
-            if (this.trophyWet) {
-                this.trophyWet.setPosition(this.trophyX, this.trophyY).setDisplaySize(this.trophyDisplayW, this.trophyDisplayH);
-            }
-            if (this.trophyShadow) {
-                this.trophyShadow.setPosition(this.trophyX, this.trophyY + 145);
-            }
-            this.trophyGlow.setPosition(this.trophyX, this.trophyY);
-            if (this.trophyMud) {
-                this.trophyMud.setPosition(this.trophyX, this.trophyY).setDisplaySize(this.trophyDisplayW, this.trophyDisplayH);
-            }
-            if (this.trophyMudHint) {
-                this.trophyMudHint.setPosition(this.trophyX, this.trophyY).setDisplaySize(this.trophyDisplayW, this.trophyDisplayH);
-            }
+        if (this.poolClean) {
+            this.poolClean.setPosition(this.poolX, this.poolY).setDisplaySize(this.poolDisplayW, this.poolDisplayH);
+            if (this.poolSoap) this.poolSoap.setPosition(this.poolX, this.poolY).setDisplaySize(this.poolDisplayW, this.poolDisplayH);
+            if (this.poolCanvasImg) this.poolCanvasImg.setPosition(this.poolX, this.poolY).setDisplaySize(this.poolDisplayW, this.poolDisplayH);
+            if (this.waterLayer) this.waterLayer.setPosition(this.poolX, this.poolY).setDisplaySize(this.poolDisplayW * 0.96, this.poolDisplayH * 0.95);
+            if (this.poolGlow) this.poolGlow.setPosition(this.poolX, this.poolY);
         }
 
         if (this.topUI) {
             this.topUI.setPosition(width / 2, Math.max(50, height * 0.08));
         }
-
-        if (this.ctaBtn) {
-            this.ctaBtn.setPosition(width / 2, height * 0.92);
-        }
-
-        if (this.tutorialContainer) {
-            this.tutorialContainer.setPosition(width / 2, this.trophyY);
-        }
-
-        if (this.toolSelectionContainer && this.toolSelectionContainer.active) {
-            const leftX = width * 0.28;
-            const leftY = height * 0.82;
-            const rightX = width * 0.72;
-            const rightY = height * 0.82;
-            if (this.toolButtons && this.toolButtons[0] && this.toolButtons[1]) {
-                this.toolButtons[0].setPosition(leftX, leftY);
-                this.toolButtons[1].setPosition(rightX, rightY);
-            }
-        }
     }
 
     createConfetti() {
         const colors = [0xff0000, 0x00ff00, 0x0000ff, 0xffff00, 0xff00ff, 0x00ffff, 0xff8800];
-        
-        // Tạo 2 emitter
+
         const leftCannon = this.add.particles(-10, 600, 'confetti', {
             speed: { min: 400, max: 800 },
-            angle: { min: -80, max: -60 }, // Bắn lên trên xiên phải
+            angle: { min: -80, max: -60 },
             gravityY: 500,
             lifespan: 4000,
             scale: { start: 1.5, end: 0.5 },
@@ -1379,7 +1279,7 @@ export class GameScene extends Phaser.Scene {
 
         const rightCannon = this.add.particles(500, 600, 'confetti', {
             speed: { min: 400, max: 800 },
-            angle: { min: -130, max: -100 }, // Bắn lên trên xiên trái
+            angle: { min: -130, max: -100 },
             gravityY: 500,
             lifespan: 4000,
             scale: { start: 1.5, end: 0.5 },
@@ -1388,47 +1288,38 @@ export class GameScene extends Phaser.Scene {
             quantity: 50
         });
 
-        // ĐẶT DEPTH CỰC CAO ĐỂ CHỐNG BỊ CHE
         leftCannon.setDepth(5000);
         rightCannon.setDepth(5000);
 
-        // Phát nổ 1 lần duy nhất
         leftCannon.explode();
         rightCannon.explode();
 
-        // Tự hủy sau 5 giây để nhẹ máy
         this.time.delayedCall(5000, () => {
             leftCannon.destroy();
             rightCannon.destroy();
         });
     }
 
-
     ShowStore() {
         const storeUrl = "https://play.google.com/store/apps/details?id=com.d28.makeover.asmr.home.cleaning.game";
-
-        console.log("Playturbo: ShowStore triggered (CTA Click)");
+        console.log("Playturbo: ShowStore triggered");
 
         if (typeof window.install === 'function') {
             window.install();
             return;
         }
-
         if (typeof ExitApi !== 'undefined' && typeof ExitApi.exit === 'function') {
             ExitApi.exit();
             return;
         }
-
         if (typeof mraid !== 'undefined' && typeof mraid.open === 'function') {
             mraid.open(storeUrl);
             return;
         }
-
         if (typeof window.openAppStore === 'function') {
             window.openAppStore();
             return;
         }
-
         window.open(storeUrl, '_blank');
     }
 }
