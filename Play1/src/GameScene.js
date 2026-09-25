@@ -119,7 +119,7 @@ export class GameScene extends Phaser.Scene {
         this.bg.setScale(Math.max(bgScaleX, bgScaleY) * 2.45);
 
         this.cameraZoomTween = null;
-        this.cameras.main.setZoom(1 / 1.4);
+        this.cameras.main.setZoom(1);
 
         // 2. Setup Pool Layers
         this.setupPoolLayers();
@@ -848,7 +848,7 @@ export class GameScene extends Phaser.Scene {
             this.isSpraying = true;
             this.startSpraySound();
 
-            this.setCameraZoomSmooth(1 / 1.2, 700);
+            this.setCameraZoomSmooth(1 / 1.05, 700);
 
             this.lastCanvasX = null;
             this.lastCanvasY = null;
@@ -869,7 +869,7 @@ export class GameScene extends Phaser.Scene {
             this.lastCanvasY = null;
 
             if (!this.isGameEnd) {
-                this.setCameraZoomSmooth(1 / 1.4, 700);
+                this.setCameraZoomSmooth(1, 700);
             }
 
             this.targetShiftX = 0;
@@ -1039,7 +1039,7 @@ export class GameScene extends Phaser.Scene {
             }
 
             // Check phase completion
-            if (this.progress >= 96) {
+            if (this.progress >= 85) {
                 if (this.currentPhase === 'soap') {
                     this.completeSoapPhase();
                 } else if (this.currentPhase === 'wash' && !this.isGameEnd) {
