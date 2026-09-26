@@ -22,6 +22,7 @@ import radialGlowImg from './assets/Texture/radial_glow.webp';
 import btnTryNowImg from './assets/Texture/btn_try_now.webp';
 import progressBgImg from './assets/Texture/progress_bg.webp';
 import progressFillImg from './assets/Texture/progress_fill.webp';
+import girlPanicImg from './assets/Texture/girl_panic_clean.webp';
 
 // Import sounds
 import sparkleSnd from './assets/Sound/sparkle.mp3';
@@ -56,6 +57,12 @@ export class GameScene extends Phaser.Scene {
         this.load.image('btn_try_now', btnTryNowImg);
         this.load.image('progress_bg', progressBgImg);
         this.load.image('progress_fill', progressFillImg);
+
+        // Load 5-frame high-res panicked girl spritesheet (300x720)
+        this.load.spritesheet('girl_panic', girlPanicImg, {
+            frameWidth: 300,
+            frameHeight: 720
+        });
 
         // Load audio
         this.load.audio('sparkle', sparkleSnd);
@@ -103,6 +110,16 @@ export class GameScene extends Phaser.Scene {
         this.winSound = this.sound.add('win', { volume: 0.9 });
         this.clickSound = this.sound.add('click', { volume: 0.8 });
 
+        // Ensure browser unlocks AudioContext on first touch/click
+        const unlockAudio = () => {
+            if (this.sound && this.sound.context && this.sound.context.state === 'suspended') {
+                this.sound.context.resume();
+            }
+        };
+        window.addEventListener('pointerdown', unlockAudio, { once: true });
+        window.addEventListener('touchstart', unlockAudio, { once: true });
+        window.addEventListener('click', unlockAudio, { once: true });
+
         this.createProceduralWaterSound();
 
         const actualWidth = this.scale.width;
@@ -112,11 +129,11 @@ export class GameScene extends Phaser.Scene {
         this.cameras.main.setScroll(-dx, -dy);
 
         // 1. Background
-        this.bg = this.add.image(this.gameWidth / 2, this.baseBgY - 100, 'bg_stadium');
+        this.bg = this.add.image(this.gameWidth / 2, this.baseBgY - 80, 'bg_stadium');
         this.bg.setDepth(-1);
         const bgScaleX = this.gameWidth / this.bg.width;
         const bgScaleY = this.gameHeight / this.bg.height;
-        this.bg.setScale(Math.max(bgScaleX, bgScaleY) * 2.45);
+        this.bg.setScale(Math.max(bgScaleX, bgScaleY) * 1.6);
 
         this.cameraZoomTween = null;
         this.cameras.main.setZoom(1);
@@ -126,6 +143,18 @@ export class GameScene extends Phaser.Scene {
 
         // 3. Setup Water Surface & Trash
         this.setupWaterAndTrash();
+
+        // 3.5. Setup Panicked Girl by pool
+        if (!this.anims.exists('girl_panic_anim')) {
+            const frameSequence = [0, 1, 2, 3, 4, 3, 2, 1];
+            this.anims.create({
+                key: 'girl_panic_anim',
+                frames: frameSequence.map(f => ({ key: 'girl_panic', frame: f })),
+                frameRate: 8,
+                repeat: -1
+            });
+        }
+        this.setupGirlPanic();
 
         // 4. Setup Particles & Effects
         this.setupEffects();
@@ -269,6 +298,197 @@ export class GameScene extends Phaser.Scene {
         this.remainingTrash = this.trashItems.length;
     }
 
+    setupGirlPanic() {
+        // Position on the pool deck at bottom right of screen (fully on-screen)
+        this.girlPanicBaseX = this.gameWidth * 0.80 + 100;
+        this.girlPanicBaseY = this.gameHeight * 0.88;
+
+        this.girlPanicContainer = this.add.container(this.girlPanicBaseX, this.girlPanicBaseY);
+        this.girlPanicContainer.setDepth(22);
+
+        // Ground shadow (scaled for 3x character, raised up under feet)
+        const shadow = this.add.ellipse(0, -10, 125, 26, 0x000000, 0.28);
+        this.girlPanicContainer.add(shadow);
+
+        // High-resolution character sprite with aligned frames
+        this.girlPanicSprite = this.add.sprite(0, 0, 'girl_panic');
+        this.girlPanicSprite.setOrigin(0.5, 1);
+        this.girlPanicSprite.setScale(0.53);
+        this.girlPanicSprite.play('girl_panic_anim');
+        this.girlPanicContainer.add(this.girlPanicSprite);
+
+        // Speech bubble container placed above character head
+        this.girlPanicBubble = this.add.container(this.girlPanicBaseX, this.girlPanicBaseY - 405);
+        this.girlPanicBubble.setDepth(28);
+        this.girlPanicBubble.setScale(0);
+        this.girlPanicBubble.setAlpha(0);
+
+        this.girlBubbleBg = this.add.graphics();
+        this.girlPanicBubble.add(this.girlBubbleBg);
+
+        this.girlBubbleText = this.add.text(0, -2, '', {
+            fontFamily: 'Arial, sans-serif',
+            fontSize: '13px',
+            fontStyle: 'bold',
+            color: '#1a1a1a'
+        }).setOrigin(0.5);
+        this.girlPanicBubble.add(this.girlBubbleText);
+
+        // Click on girl to react
+        this.girlPanicSprite.setInteractive({ useHandCursor: true });
+        this.girlPanicSprite.on('pointerdown', (pointer) => {
+            this.clickSound.play();
+            const clickQuotes = ["😱 Please help clean it!", "🤢 So disgusting!", "🏖️ I want to swim!"];
+            this.showGirlDialogue(Phaser.Utils.Array.GetRandom(clickQuotes), 2400);
+        });
+
+        // Periodic dialogue triggers
+        this.time.addEvent({
+            delay: 4500,
+            repeat: -1,
+            callback: () => {
+                if (this.isGameEnd) return;
+                const dialogues = {
+                    trash: ["😱 So dirty!", "🤢 Ew, filthy!", "🏖️ Need to swim!", "🧹 Please clean up!"],
+                    drain: ["😮 Draining water...", "✨ Getting ready!"],
+                    soap: ["🧼 Soap it up!", "🫧 So much foam!", "🧴 Scrub hard!"],
+                    wash: ["💦 Power wash it!", "🌊 Looking clean!", "😍 Almost done!"]
+                };
+                const list = dialogues[this.currentPhase] || dialogues.trash;
+                this.showGirlDialogue(Phaser.Utils.Array.GetRandom(list), 2200);
+            }
+        });
+    }
+
+    showGirlDialogue(message, duration = 2200) {
+        if (!this.girlPanicBubble || !this.girlBubbleText || !this.girlBubbleBg) return;
+
+        if (this.dialogueTypingEvent) {
+            this.dialogueTypingEvent.remove();
+            this.dialogueTypingEvent = null;
+        }
+
+        // Measure full bubble size
+        this.girlBubbleText.setText(message);
+        const padX = 10;
+        const padY = 6;
+        const bubbleW = this.girlBubbleText.width + padX * 2;
+        const bubbleH = this.girlBubbleText.height + padY * 2;
+
+        this.girlBubbleBg.clear();
+        this.girlBubbleBg.fillStyle(0xffffff, 0.96);
+        this.girlBubbleBg.fillRoundedRect(-bubbleW / 2, -bubbleH / 2, bubbleW, bubbleH, 9);
+        this.girlBubbleBg.lineStyle(1.8, 0x00bcd4, 0.95);
+        this.girlBubbleBg.strokeRoundedRect(-bubbleW / 2, -bubbleH / 2, bubbleW, bubbleH, 9);
+
+        // Small tail pointing down to head
+        this.girlBubbleBg.fillStyle(0xffffff, 0.96);
+        this.girlBubbleBg.fillTriangle(-5, bubbleH / 2, 5, bubbleH / 2, 0, bubbleH / 2 + 6);
+
+        this.girlPanicBubble.setPosition(this.girlPanicContainer.x, this.girlPanicContainer.y - 405);
+        this.girlPanicBubble.setScale(0);
+        this.girlPanicBubble.setAlpha(0);
+
+        // Reset text for typewriter effect
+        this.girlBubbleText.setText('');
+
+        this.tweens.killTweensOf(this.girlPanicBubble);
+        this.tweens.add({
+            targets: this.girlPanicBubble,
+            scaleX: 1,
+            scaleY: 1,
+            alpha: 1,
+            duration: 180,
+            ease: 'Back.easeOut',
+            onComplete: () => {
+                this.startTypewriterDialogue(message, duration);
+            }
+        });
+    }
+
+    startTypewriterDialogue(message, duration) {
+        // Support emojis and special characters safely
+        const chars = Array.from(message);
+        let charIdx = 0;
+
+        const isPanic = message && (message.includes('😱') || message.includes('🤢') || message.includes('Please') || message.includes('dirty') || message.includes('Ew') || message.includes('filthy'));
+        const baseFreq = isPanic ? 560 : 480;
+
+        this.dialogueTypingEvent = this.time.addEvent({
+            delay: 45,
+            repeat: chars.length - 1,
+            callback: () => {
+                charIdx++;
+                const currentStr = chars.slice(0, charIdx).join('');
+                if (this.girlBubbleText) {
+                    this.girlBubbleText.setText(currentStr);
+                }
+
+                const ch = chars[charIdx - 1];
+                if (ch && ch.trim().length > 0) {
+                    this.playLetterVoiceChirp(ch, charIdx, baseFreq);
+                }
+
+                if (charIdx >= chars.length) {
+                    this.time.delayedCall(duration, () => {
+                        if (this.girlPanicBubble) {
+                            this.tweens.add({
+                                targets: this.girlPanicBubble,
+                                alpha: 0,
+                                scaleX: 0,
+                                scaleY: 0,
+                                duration: 160,
+                                ease: 'Sine.easeIn'
+                            });
+                        }
+                    });
+                }
+            }
+        });
+    }
+
+    playLetterVoiceChirp(char, charIndex, baseFreq) {
+        try {
+            const audioCtx = this.sound && this.sound.context ? this.sound.context : null;
+            if (!audioCtx) return;
+
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume().catch(() => {});
+            }
+
+            const now = audioCtx.currentTime;
+            // Melodic pitch variation per letter (Animal Crossing / RPG text sound style)
+            const code = char.charCodeAt(0) || 0;
+            const pitchShift = ((code + charIndex * 3) % 7) * 24 - 40;
+            const freq = Math.max(380, baseFreq + pitchShift);
+
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            const filter = audioCtx.createBiquadFilter();
+
+            filter.type = 'lowpass';
+            filter.frequency.setValueAtTime(2200, now);
+
+            osc.type = (charIndex % 3 === 0) ? 'triangle' : 'sine';
+            osc.frequency.setValueAtTime(freq, now);
+            osc.frequency.exponentialRampToValueAtTime(freq * 1.15, now + 0.035);
+
+            const dur = 0.045;
+            gain.gain.setValueAtTime(0.001, now);
+            gain.gain.linearRampToValueAtTime(0.28, now + 0.008);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + dur);
+
+            osc.connect(filter);
+            filter.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            osc.start(now);
+            osc.stop(now + dur + 0.01);
+        } catch (e) {
+            // Audio context not ready
+        }
+    }
+
     startTrashPhase() {
         this.currentPhase = 'trash';
         this.canClean = false;
@@ -276,18 +496,12 @@ export class GameScene extends Phaser.Scene {
             this.promptText.setText('TAP TO REMOVE TRASH!');
             this.promptText.setColor('#ffea75');
         }
-        this.updateTrashTutorialHand();
+        this.hideTutorial();
     }
 
     updateTrashTutorialHand() {
-        const nextTrash = this.trashItems.find(t => t && t.active && t.visible);
-        if (nextTrash && this.tutorialHand) {
-            this.tutorialContainer.setVisible(true);
-            this.tutorialContainer.setPosition(nextTrash.x + 20, nextTrash.y + 30);
-            if (this.tutorialTween) this.tutorialTween.restart();
-        } else {
-            this.hideTutorial();
-        }
+        // Hand tutorial disabled for trash phase as requested
+        this.hideTutorial();
     }
 
     collectTrash(trash, index) {
@@ -719,6 +933,8 @@ export class GameScene extends Phaser.Scene {
         // UI camera ignores world elements
         const worldElements = [
             this.bg,
+            this.girlPanicContainer,
+            this.girlPanicBubble,
             this.poolClean,
             this.poolSoap,
             this.poolCanvasImg,
@@ -1136,6 +1352,20 @@ export class GameScene extends Phaser.Scene {
             ease: 'Sine.easeInOut'
         });
 
+        // Panicked girl celebrates victory with joy
+        if (this.girlTrembleTween) this.girlTrembleTween.stop();
+        if (this.girlPanicContainer) {
+            this.tweens.add({
+                targets: this.girlPanicContainer,
+                y: this.girlPanicBaseY - 20,
+                duration: 280,
+                yoyo: true,
+                repeat: -1,
+                ease: 'Back.easeOut'
+            });
+            this.showGirlDialogue("🎉 WOW! SO CLEAN! 💖", 5000);
+        }
+
         // Sparkle burst across pool
         this.time.addEvent({
             delay: 150,
@@ -1227,6 +1457,13 @@ export class GameScene extends Phaser.Scene {
             if (this.poolGlow) this.poolGlow.x = this.poolX;
             if (this.waterLayer) this.waterLayer.x = this.poolX;
         }
+
+        if (this.girlPanicContainer) {
+            this.girlPanicContainer.x = this.girlPanicBaseX + this.currentShiftX;
+            if (this.girlPanicBubble) {
+                this.girlPanicBubble.x = this.girlPanicBaseX + this.currentShiftX;
+            }
+        }
     }
 
     handleResize(gameSize) {
@@ -1256,6 +1493,15 @@ export class GameScene extends Phaser.Scene {
             if (this.poolCanvasImg) this.poolCanvasImg.setPosition(this.poolX, this.poolY).setDisplaySize(this.poolDisplayW, this.poolDisplayH);
             if (this.waterLayer) this.waterLayer.setPosition(this.poolX, this.poolY).setDisplaySize(this.poolDisplayW * 0.96, this.poolDisplayH * 0.95);
             if (this.poolGlow) this.poolGlow.setPosition(this.poolX, this.poolY);
+        }
+
+        if (this.girlPanicContainer) {
+            this.girlPanicBaseX = width * 0.80 + 100;
+            this.girlPanicBaseY = height * 0.88;
+            this.girlPanicContainer.setPosition(this.girlPanicBaseX, this.girlPanicBaseY);
+            if (this.girlPanicBubble) {
+                this.girlPanicBubble.setPosition(this.girlPanicBaseX, this.girlPanicBaseY - 405);
+            }
         }
 
         if (this.topUI) {
