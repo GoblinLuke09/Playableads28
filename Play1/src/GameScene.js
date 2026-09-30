@@ -14,25 +14,33 @@ import btnTryNowImg from './assets/Texture/btn_try_now.webp';
 import progressBgImg from './assets/Texture/progress_bg.webp';
 import progressFillImg from './assets/Texture/progress_fill.webp';
 import gunNozzleImg from './assets/Texture/gun_nozzle.webp';
+import gunNozzleDot1Img from './assets/Texture/gun_nozzle.1.webp';
 import gunNozzle1Img from './assets/Texture/gun_nozzle1.webp';
+import gunNozzle1Dot1Img from './assets/Texture/gun_nozzle1.1.webp';
 import rubsoapImg from './assets/Texture/rubsoap.webp';
+import rubsoapDot1Img from './assets/Texture/rubsoap.1.webp';
 import sweatClothImg from './assets/Texture/sweat_cloth.webp';
+import sweatClothDot1Img from './assets/Texture/sweat_cloth.1.webp';
 import waterPipeImg from './assets/Texture/water_pipe.webp';
 import bubbleImg from './assets/Texture/bubble.webp';
 import btnToolImg from './assets/Texture/btn_Tool.png';
 import handImg from './assets/Texture/hand.webp';
 import waterImg from './assets/Texture/water.webp';
 import waterDropsImg from './assets/Texture/water_drops.webp';
+import girlTummyImg from './assets/Texture/girl_tummy_ache.webp';
+import toiletDoorImg from './assets/Texture/toilet_door.webp';
 
 // Import sounds
 import sparkleSnd from './assets/Sound/sparkle.mp3';
 import winSnd from './assets/Sound/win.mp3';
 import clickSnd from './assets/Sound/click.mp3';
+import girlHelpMeSnd from './assets/Sound/girl_help_me.mp3';
 
 const STEPS = [
     {
         id: 1,
         toolKey: 'gun_nozzle',
+        toolOptions: ['gun_nozzle', 'gun_nozzle.1'],
         toolType: 'gun',
         currentTexture: 'trophy_dirty',
         nextTexture: 'trophy_soap',
@@ -44,6 +52,7 @@ const STEPS = [
     {
         id: 2,
         toolKey: 'rubsoap',
+        toolOptions: ['rubsoap', 'rubsoap.1'],
         toolType: 'rub',
         currentTexture: 'trophy_soap',
         nextTexture: 'trophy_rubsoap',
@@ -55,6 +64,7 @@ const STEPS = [
     {
         id: 3,
         toolKey: 'gun_nozzle1',
+        toolOptions: ['gun_nozzle1', 'gun_nozzle1.1'],
         toolType: 'gun',
         currentTexture: 'trophy_rubsoap',
         nextTexture: 'trophy_wet',
@@ -66,6 +76,7 @@ const STEPS = [
     {
         id: 4,
         toolKey: 'sweat_cloth',
+        toolOptions: ['sweat_cloth', 'sweat_cloth.1'],
         toolType: 'cloth',
         currentTexture: 'trophy_wet',
         nextTexture: 'trophy_clean',
@@ -83,6 +94,8 @@ export class GameScene extends Phaser.Scene {
 
     preload() {
         // Load textures
+        this.load.image('girl_tummy', girlTummyImg);
+        this.load.image('toilet_door', toiletDoorImg);
         this.load.image('bg_stadium', bgImg);
         this.load.image('trophy_clean', trophyCleanImg);
         this.load.image('trophy_wet', trophyWetImg);
@@ -96,9 +109,13 @@ export class GameScene extends Phaser.Scene {
         this.load.image('progress_bg', progressBgImg);
         this.load.image('progress_fill', progressFillImg);
         this.load.image('gun_nozzle', gunNozzleImg);
+        this.load.image('gun_nozzle.1', gunNozzleDot1Img);
         this.load.image('gun_nozzle1', gunNozzle1Img);
+        this.load.image('gun_nozzle1.1', gunNozzle1Dot1Img);
         this.load.image('rubsoap', rubsoapImg);
+        this.load.image('rubsoap.1', rubsoapDot1Img);
         this.load.image('sweat_cloth', sweatClothImg);
+        this.load.image('sweat_cloth.1', sweatClothDot1Img);
         this.load.image('water_pipe', waterPipeImg);
         this.load.image('bubble', bubbleImg);
         this.load.image('btn_tool', btnToolImg);
@@ -110,6 +127,7 @@ export class GameScene extends Phaser.Scene {
         this.load.audio('sparkle', sparkleSnd);
         this.load.audio('win', winSnd);
         this.load.audio('click', clickSnd);
+        this.load.audio('girl_help_me', girlHelpMeSnd);
 
         // Confetti texture
         let cGraphics = this.make.graphics({ x: 0, y: 0, add: false });
@@ -148,13 +166,16 @@ export class GameScene extends Phaser.Scene {
         this.currentBgShiftX = 0;
         this.baseTrophyX = this.gameWidth / 2;
         this.baseBgX = this.gameWidth / 2 - 10;
-        this.baseTrophyY = this.gameHeight * 0.48;
+        this.baseTrophyY = this.gameHeight * 0.38;
         this.baseBgY = this.gameHeight * 0.35;
+        this.introOffsetY = 135;
+        this.isIntro = true;
 
         // Sound instances
         this.sparkleSound = this.sound.add('sparkle', { volume: 0.8 });
         this.winSound = this.sound.add('win', { volume: 0.9 });
         this.clickSound = this.sound.add('click', { volume: 0.8 });
+        this.girlHelpSound = this.sound.add('girl_help_me', { volume: 0.95 });
 
         // High-pressure water procedural audio
         this.createProceduralWaterSound();
@@ -165,16 +186,16 @@ export class GameScene extends Phaser.Scene {
         const dy = (actualHeight - this.gameHeight) / 2;
         this.cameras.main.setScroll(-dx, -dy);
 
-        // Background
-        this.bg = this.add.image(this.gameWidth / 2 - 10, this.baseBgY - 150, 'bg_stadium');
+        // Background (lowered during intro)
+        this.bg = this.add.image(this.gameWidth / 2 - 10, this.baseBgY + this.introOffsetY, 'bg_stadium');
         this.bg.setDepth(-1);
         const bgScaleX = this.gameWidth / this.bg.width;
         const bgScaleY = this.gameHeight / this.bg.height;
         this.bg.setScale(Math.max(bgScaleX, bgScaleY) * 2.45);
 
-        // Initial camera zoom
+        // Initial camera zoom (smaller during intro, zooms in when started)
         this.cameraZoomTween = null;
-        this.cameras.main.setZoom(1 / 1.4);
+        this.cameras.main.setZoom(0.30);
 
         // Trophy Setup
         this.setupTrophy();
@@ -187,6 +208,10 @@ export class GameScene extends Phaser.Scene {
 
         // UI Setup
         this.setupUI();
+        this.setupToolSelectionUI();
+
+        // Intro Scene Setup
+        this.setupIntroScene();
 
         // Tutorial Hand
         this.setupTutorial();
@@ -204,9 +229,6 @@ export class GameScene extends Phaser.Scene {
         if (typeof window.gameReady === 'function') {
             window.gameReady();
         }
-
-        // Start Step 1 automatically
-        this.startStep(0);
     }
 
     resizeBackground() {
@@ -226,14 +248,14 @@ export class GameScene extends Phaser.Scene {
         this.baseTrophyX = width / 2;
         this.trophyX = this.baseTrophyX + this.currentShiftX;
         this.baseTrophyY = height * 0.38;
-        this.trophyY = this.baseTrophyY;
+        this.trophyY = this.isIntro ? (this.baseTrophyY + (this.introOffsetY || 135)) : this.baseTrophyY;
 
         const targetTrophyHeight = Math.min(height * 0.58, 540);
         const scale = targetTrophyHeight / 1000;
         this.trophyScale = scale;
 
-        this.trophyDisplayW = 1040 * scale;
-        this.trophyDisplayH = 1000 * scale;
+        this.trophyDisplayW = 840 * scale;
+        this.trophyDisplayH = 1580 * scale;
 
         // Glow behind trophy for victory (Depth 4)
         this.trophyGlow = this.add.image(this.trophyX, this.trophyY, 'radial_glow');
@@ -242,7 +264,7 @@ export class GameScene extends Phaser.Scene {
         this.trophyGlow.setTint(0xffdf66);
         this.trophyGlow.setAlpha(0);
 
-        this.trophyShadow = this.add.image(this.trophyX, this.trophyY + 145, 'trophy_shadow');
+        this.trophyShadow = this.add.image(this.trophyX, this.trophyY, 'trophy_shadow');
         this.trophyShadow.setScale(0.45);
         this.trophyShadow.setDepth(3);
 
@@ -253,8 +275,8 @@ export class GameScene extends Phaser.Scene {
 
         // Dynamic Canvas Texture on top (Depth 10) - starts completely transparent
         const dirtySource = this.textures.get('trophy_dirty').getSourceImage();
-        this.dirtyCanvasW = 1040;
-        this.dirtyCanvasH = 1000;
+        this.dirtyCanvasW = 840;
+        this.dirtyCanvasH = 1580;
 
         if (this.textures.exists('mud_canvas_tex')) {
             this.textures.remove('mud_canvas_tex');
@@ -430,8 +452,9 @@ export class GameScene extends Phaser.Scene {
         const height = this.gameHeight;
 
         // 1. Water Gun Container (for gun_nozzle & gun_nozzle1)
-        this.gunContainer = this.add.container(width * 0.5, height + 500);
+        this.gunContainer = this.add.container(width * 0.5, height + 1000);
         this.gunContainer.setDepth(25);
+        this.gunContainer.setVisible(false);
 
         this.gunPipe = this.add.image(0, 0, 'water_pipe');
         this.gunPipe.setOrigin(0.5, 0.04);
@@ -450,16 +473,18 @@ export class GameScene extends Phaser.Scene {
         this.gunContainer.setRotation(initAngle + Math.PI / 2);
 
         // 2. Rub Soap Container (for rubsoap)
-        this.rubContainer = this.add.container(width * 0.5, height + 500);
+        this.rubContainer = this.add.container(width * 0.5, height + 1000);
         this.rubContainer.setDepth(25);
+        this.rubContainer.setVisible(false);
         this.rubSoap = this.add.image(0, 0, 'rubsoap');
         this.rubSoap.setOrigin(0.5, 0.5);
         this.rubSoap.setScale(0.55);
         this.rubContainer.add(this.rubSoap);
 
         // 3. Sweat Cloth Container (for sweat_cloth)
-        this.clothContainer = this.add.container(width * 0.5, height + 500);
+        this.clothContainer = this.add.container(width * 0.5, height + 1000);
         this.clothContainer.setDepth(25);
+        this.clothContainer.setVisible(false);
         this.sweatCloth = this.add.image(0, 0, 'sweat_cloth');
         this.sweatCloth.setOrigin(0.5, 0.5);
         this.sweatCloth.setScale(0.55);
@@ -519,6 +544,345 @@ export class GameScene extends Phaser.Scene {
             duration: 600,
             ease: 'Sine.easeInOut'
         });
+
+        // Initially hidden during intro
+        this.topUI.setVisible(false);
+    }
+
+    setupIntroScene() {
+        this.isIntro = true;
+        this.canClean = false;
+        this.isCleaning = false;
+
+        const { width, height } = this.scale;
+
+        // Intro Container (Depth 50, UI layer)
+        this.introContainer = this.add.container(width / 2, height / 2);
+        this.introContainer.setDepth(50);
+
+        // Clickable backdrop zone for quick start anywhere
+        const introZone = this.add.zone(0, 0, width * 2, height * 2);
+        introZone.setInteractive({ useHandCursor: true });
+        introZone.on('pointerdown', () => {
+            this.startMainGameFromIntro();
+        });
+        this.introContainer.add(introZone);
+
+        // Fixed non-stretching scales & positions (immune to screen aspect ratio distortions)
+        const doorScale = 0.9;
+        const girlScale = 0.28;
+        const girlX = 145;
+        const girlY = 85;
+        const bubbleY = -85;
+        const btnY = 230;
+
+        // 1. Full 3D Wall & Door Frame with fixed scale and centered position
+        this.introDoor = this.add.image(0, -50, 'toilet_door');
+        this.introDoor.setScale(doorScale);
+        this.introContainer.add(this.introDoor);
+
+        // 2. Animated Stomach Ache Girl in Red Dress with fixed scale and position
+        this.introGirl = this.add.image(girlX, girlY, 'girl_tummy');
+        this.introGirl.setScale(girlScale);
+        this.introContainer.add(this.introGirl);
+
+        // Shivering / anxious tummy discomfort animation
+        this.tweens.add({
+            targets: this.introGirl,
+            y: girlY + 6,
+            scaleY: girlScale * 0.97,
+            scaleX: girlScale * 1.02,
+            duration: 260,
+            yoyo: true,
+            repeat: -1,
+            ease: 'Sine.easeInOut'
+        });
+
+        // Anxious body wobble / distress
+        this.tweens.add({
+            targets: this.introGirl,
+            rotation: 0.035,
+            duration: 380,
+            yoyo: true,
+            repeat: -1,
+            ease: 'Sine.easeInOut'
+        });
+
+        // Play girl voice "Help me!"
+        this.time.delayedCall(300, () => {
+            if (this.isIntro && this.girlHelpSound) {
+                try {
+                    this.girlHelpSound.play();
+                } catch (e) {
+                    console.warn('Audio play error:', e);
+                }
+            }
+        });
+
+        // 3. Speech emote bubble popping directly above girl's head
+        this.introBubble = this.add.container(girlX, bubbleY);
+        const bubbleBg = this.add.graphics();
+        bubbleBg.fillStyle(0xffffff, 0.98);
+        bubbleBg.fillRoundedRect(-85, -22, 170, 44, 12);
+        bubbleBg.lineStyle(2, 0xff4444, 0.9);
+        bubbleBg.strokeRoundedRect(-85, -22, 170, 44, 12);
+        bubbleBg.fillTriangle(0, 22, 12, 22, 6, 32);
+
+        const bubbleTxt = this.add.text(0, 0, '🤢 Help me!', {
+            fontFamily: 'Arial, sans-serif',
+            fontSize: '15px',
+            fontStyle: 'bold',
+            color: '#d60000'
+        }).setOrigin(0.5);
+
+        this.introBubble.add([bubbleBg, bubbleTxt]);
+        this.introContainer.add(this.introBubble);
+
+        this.tweens.add({
+            targets: this.introBubble,
+            scaleX: 1.08,
+            scaleY: 1.08,
+            yoyo: true,
+            repeat: -1,
+            duration: 500,
+            ease: 'Sine.easeInOut'
+        });
+
+        // 4. Action Button ("Help Her") - initially hidden, pops up after delay
+        this.introHelpBtn = this.add.container(0, btnY);
+        this.introHelpBtn.setScale(0);
+        this.introHelpBtn.setAlpha(0);
+
+        // Green button graphic
+        const btnBg = this.add.graphics();
+        btnBg.fillStyle(0x00cc44, 1.0);
+        btnBg.fillRoundedRect(-140, -32, 280, 64, 16);
+        btnBg.lineStyle(3, 0xffffff, 1.0);
+        btnBg.strokeRoundedRect(-140, -32, 280, 64, 16);
+
+        const btnLabel = this.add.text(0, -2, 'Help Her', {
+            fontFamily: 'Arial, sans-serif',
+            fontSize: '28px',
+            fontStyle: 'bold',
+            color: '#ffffff',
+            stroke: '#005500',
+            strokeThickness: 3
+        }).setOrigin(0.5);
+
+        // Glowing pulse behind button
+        const btnGlow = this.add.graphics();
+        btnGlow.fillStyle(0x00ff00, 0.45);
+        btnGlow.fillRoundedRect(-150, -38, 300, 76, 20);
+
+        this.introHelpBtn.add([btnGlow, btnBg, btnLabel]);
+
+        this.tweens.add({
+            targets: btnGlow,
+            alpha: 0.15,
+            scaleX: 1.08,
+            scaleY: 1.08,
+            yoyo: true,
+            repeat: -1,
+            duration: 600,
+            ease: 'Sine.easeInOut'
+        });
+
+        // Interactive hit zone for Help Her button
+        const hitZone = this.add.zone(0, 0, 300, 80);
+        hitZone.setInteractive({ useHandCursor: true });
+        hitZone.on('pointerdown', (pointer) => {
+            if (pointer && pointer.event) pointer.event.stopPropagation();
+            this.startMainGameFromIntro();
+        });
+        this.introHelpBtn.add(hitZone);
+
+        this.introContainer.add(this.introHelpBtn);
+
+        // Tutorial Hand tapping on Help Her button
+        this.introHand = this.add.image(30, btnY + 30, 'hand');
+        this.introHand.setScale(0);
+        this.introHand.setAlpha(0);
+        this.introContainer.add(this.introHand);
+
+        // Show button & tutorial hand after delay (1.35s) for player to see the girl's stomach ache animation first
+        this.time.delayedCall(1350, () => {
+            if (!this.isIntro || !this.introHelpBtn) return;
+
+            this.tweens.add({
+                targets: this.introHelpBtn,
+                scaleX: 1,
+                scaleY: 1,
+                alpha: 1,
+                duration: 450,
+                ease: 'Back.easeOut'
+            });
+
+            this.tweens.add({
+                targets: this.introHand,
+                scaleX: 0.52,
+                scaleY: 0.52,
+                alpha: 1,
+                duration: 350,
+                ease: 'Back.easeOut',
+                onComplete: () => {
+                    this.tweens.add({
+                        targets: this.introHand,
+                        scaleX: 0.44,
+                        scaleY: 0.44,
+                        y: btnY + 16,
+                        yoyo: true,
+                        repeat: -1,
+                        duration: 450,
+                        ease: 'Sine.easeInOut'
+                    });
+                }
+            });
+        });
+    }
+
+    startMainGameFromIntro() {
+        if (!this.isIntro) return;
+        this.isIntro = false;
+
+        this.clickSound.play();
+
+        // Smoothly zoom the camera into the bathroom to bring the toilet back to full gameplay size!
+        this.setCameraZoomSmooth(0.50, 650);
+
+        // Smoothly tween background and toilet up from the lower intro position to normal gameplay position!
+        this.tweens.add({
+            targets: this.bg,
+            y: this.baseBgY,
+            duration: 650,
+            ease: 'Cubic.easeOut'
+        });
+
+        this.tweens.add({
+            targets: [this.trophyBase, this.trophyMud, this.trophyGlow, this.trophyShadow],
+            y: this.baseTrophyY,
+            duration: 650,
+            ease: 'Cubic.easeOut',
+            onUpdate: () => {
+                this.trophyY = this.trophyBase.y;
+                if (this.trophyShadow) this.trophyShadow.setY(this.trophyY);
+            }
+        });
+
+        // Sparkle burst around button click
+        if (this.sparkleEmitter) {
+            const { width, height } = this.scale;
+            this.sparkleEmitter.emitParticleAt(width / 2, height * 0.86, 12);
+        }
+
+        // Smooth zoom through the doorway into the room
+        if (this.introContainer) {
+            this.tweens.add({
+                targets: this.introContainer,
+                scaleX: 2.2,
+                scaleY: 2.2,
+                alpha: 0,
+                duration: 550,
+                ease: 'Cubic.easeIn',
+                onComplete: () => {
+                    if (this.introContainer) {
+                        this.introContainer.destroy();
+                        this.introContainer = null;
+                    }
+                }
+            });
+        }
+
+        // Fade in top UI
+        if (this.topUI) {
+            this.topUI.setVisible(true);
+            this.topUI.setAlpha(0);
+            this.tweens.add({
+                targets: this.topUI,
+                alpha: 1,
+                duration: 400
+            });
+        }
+
+        // Start gameplay with tool selection for Step 1
+        this.time.delayedCall(300, () => {
+            this.startStep(0);
+        });
+    }
+
+    setupToolSelectionUI() {
+        const { width, height } = this.scale;
+
+        this.toolSelectionContainer = this.add.container(width / 2, Math.min(height * 0.85, height - 90));
+        this.toolSelectionContainer.setDepth(35);
+        this.toolSelectionContainer.setVisible(false);
+
+        // Subtitle / Prompt above tool option cards
+        this.toolSelectionTitle = this.add.text(0, -85, 'CHOOSE YOUR TOOL!', {
+            fontFamily: 'Arial, sans-serif',
+            fontSize: '18px',
+            fontStyle: 'bold',
+            color: '#ffea75',
+            stroke: '#000000',
+            strokeThickness: 4
+        }).setOrigin(0.5);
+        this.toolSelectionContainer.add(this.toolSelectionTitle);
+
+        this.tweens.add({
+            targets: this.toolSelectionTitle,
+            scaleX: 1.08,
+            scaleY: 1.08,
+            yoyo: true,
+            repeat: -1,
+            duration: 600,
+            ease: 'Sine.easeInOut'
+        });
+
+        // 2 Option Cards (Left & Right)
+        this.toolOptionCards = [];
+        const spacing = 130;
+        [-spacing / 2, spacing / 2].forEach((offsetX, idx) => {
+            const card = this.add.container(offsetX, 0);
+
+            // Card background btn_tool
+            const bg = this.add.image(0, 0, 'btn_tool');
+            bg.setScale(0.85);
+            bg.setInteractive({ useHandCursor: true });
+
+            // Tool icon
+            const icon = this.add.image(0, 0, 'gun_nozzle');
+            icon.setScale(0.42);
+
+            card.add([bg, icon]);
+            card.bg = bg;
+            card.icon = icon;
+
+            bg.on('pointerdown', (pointer) => {
+                if (pointer && pointer.event) pointer.event.stopPropagation();
+                if (!this.isWaitingForToolSelection) return;
+                this.selectToolOption(idx);
+            });
+
+            this.toolSelectionContainer.add(card);
+            this.toolOptionCards.push(card);
+        });
+
+        // Tutorial hand specifically for tool selection
+        this.toolHand = this.add.image(0, 45, 'hand');
+        this.toolHand.setScale(0.48);
+        this.toolHand.setDepth(36);
+        this.toolSelectionContainer.add(this.toolHand);
+
+        this.toolHandTween = this.tweens.add({
+            targets: this.toolHand,
+            x: { from: -spacing / 2 + 20, to: spacing / 2 + 20 },
+            y: { from: 45, to: 45 },
+            scaleX: { from: 0.48, to: 0.42 },
+            scaleY: { from: 0.48, to: 0.42 },
+            yoyo: true,
+            repeat: -1,
+            duration: 850,
+            ease: 'Sine.easeInOut'
+        });
     }
 
     startStep(stepIndex) {
@@ -573,36 +937,152 @@ export class GameScene extends Phaser.Scene {
             this.initProgressGrid();
         }
 
-        // 4. Setup Tool & Emitters according to step
+        // 4. Setup Tool radius & offsets
         this.currentCleanRadius = step.cleanRadius;
         this.currentStreamOffsetY = step.streamOffsetY;
 
-        if (step.toolKey === 'gun_nozzle1') {
-            this.waterStreamEmitter = this.waterStreamEmitter_nozzle1;
-            this.gunPipe.setVisible(true);
-            this.gunNozzle.setTexture('gun_nozzle1');
-        } else if (step.toolKey === 'gun_nozzle') {
-            this.waterStreamEmitter = this.waterStreamEmitter_nozzle;
-            this.gunPipe.setVisible(false);
-            this.gunNozzle.setTexture('gun_nozzle');
-        }
+        // Hide all tool containers initially
+        Object.values(this.toolContainers).forEach(c => {
+            c.setPosition(this.gameWidth * 0.5, this.gameHeight + 1000);
+            c.setVisible(false);
+        });
 
-        // 5. UI Prompt Text
-        this.promptText.setText(step.prompt);
+        // 5. Show Tool Selection UI at bottom center
+        this.showToolSelection(step);
+    }
+
+    showToolSelection(step) {
+        this.isWaitingForToolSelection = true;
+        this.canClean = false;
+        this.isCleaning = false;
+        this.hideTutorial();
+
+        this.promptText.setText('STEP ' + step.id + ': ' + step.prompt);
         this.promptText.setColor('#ffea75');
 
-        // 6. Position & Animate Active Tool Container
-        const activeContainer = this.toolContainers[step.toolType];
-        this.activeToolContainer = activeContainer;
+        const options = step.toolOptions || [step.toolKey, step.toolKey + '.1'];
+        this.currentStepToolOptions = options;
 
-        // Hide other tool containers
-        Object.values(this.toolContainers).forEach(c => {
-            if (c !== activeContainer) {
-                c.setPosition(this.gameWidth * 0.5, this.gameHeight + 500);
+        options.forEach((optKey, idx) => {
+            if (this.toolOptionCards[idx]) {
+                const card = this.toolOptionCards[idx];
+                card.icon.setTexture(optKey);
+
+                // Custom scaling & orientation per tool type
+                if (optKey.startsWith('gun_nozzle1')) {
+                    card.icon.setScale(0.38);
+                    card.icon.setRotation(Phaser.Math.DegToRad(-45));
+                } else if (optKey.startsWith('gun_nozzle')) {
+                    card.icon.setScale(0.38);
+                    card.icon.setRotation(Phaser.Math.DegToRad(-45));
+                } else if (optKey.startsWith('rubsoap')) {
+                    card.icon.setScale(0.55);
+                    card.icon.setRotation(0);
+                } else if (optKey.startsWith('sweat_cloth')) {
+                    card.icon.setScale(0.60);
+                    card.icon.setRotation(0);
+                }
+
+                card.setScale(1);
             }
         });
 
-        // Slide tool up into view
+        const { width, height } = this.scale;
+        this.toolSelectionContainer.setPosition(width / 2, Math.min(height * 0.85, height - 90));
+        this.toolSelectionContainer.setScale(0);
+        this.toolSelectionContainer.setAlpha(0);
+        this.toolSelectionContainer.setVisible(true);
+
+        this.tweens.killTweensOf(this.toolSelectionContainer);
+        this.tweens.add({
+            targets: this.toolSelectionContainer,
+            scaleX: 1,
+            scaleY: 1,
+            alpha: 1,
+            duration: 350,
+            ease: 'Back.easeOut'
+        });
+
+        this.toolOptionCards.forEach((card, i) => {
+            this.tweens.killTweensOf(card);
+            this.tweens.add({
+                targets: card,
+                scaleX: 1.05,
+                scaleY: 1.05,
+                duration: 600,
+                yoyo: true,
+                repeat: -1,
+                delay: i * 150,
+                ease: 'Sine.easeInOut'
+            });
+        });
+
+        if (this.toolHandTween) this.toolHandTween.restart();
+    }
+
+    selectToolOption(optionIndex) {
+        if (!this.isWaitingForToolSelection) return;
+        this.isWaitingForToolSelection = false;
+
+        this.clickSound.play();
+        const chosenKey = this.currentStepToolOptions[optionIndex] || this.currentStepToolOptions[0];
+        const step = STEPS[this.currentStepIndex];
+
+        // Sparkle emitter effect on the chosen card
+        const chosenCard = this.toolOptionCards[optionIndex];
+        if (chosenCard) {
+            this.tweens.killTweensOf(chosenCard);
+            this.tweens.add({
+                targets: chosenCard,
+                scaleX: 1.25,
+                scaleY: 1.25,
+                duration: 160,
+                yoyo: true
+            });
+            const worldPos = chosenCard.getWorldTransformMatrix();
+            if (this.sparkleEmitter) {
+                this.sparkleEmitter.emitParticleAt(worldPos.tx, worldPos.ty, 6);
+            }
+        }
+
+        // Apply chosen texture to the active tool
+        if (step.toolType === 'gun') {
+            this.gunNozzle.setTexture(chosenKey);
+            if (chosenKey.includes('gun_nozzle1')) {
+                this.waterStreamEmitter = this.waterStreamEmitter_nozzle1;
+                this.gunPipe.setVisible(true);
+            } else {
+                this.waterStreamEmitter = this.waterStreamEmitter_nozzle;
+                this.gunPipe.setVisible(false);
+            }
+        } else if (step.toolType === 'rub') {
+            this.rubSoap.setTexture(chosenKey);
+        } else if (step.toolType === 'cloth') {
+            this.sweatCloth.setTexture(chosenKey);
+        }
+
+        // Hide tool selection UI
+        this.tweens.add({
+            targets: this.toolSelectionContainer,
+            scaleX: 0,
+            scaleY: 0,
+            alpha: 0,
+            duration: 250,
+            ease: 'Back.easeIn',
+            onComplete: () => {
+                this.toolSelectionContainer.setVisible(false);
+            }
+        });
+
+        // Update prompt text to action prompt
+        this.promptText.setText(step.prompt);
+        this.promptText.setColor('#ffea75');
+
+        // Slide active tool up into view
+        const activeContainer = this.toolContainers[step.toolType];
+        this.activeToolContainer = activeContainer;
+        activeContainer.setVisible(true);
+
         const targetY = step.toolType === 'gun' ? this.gameHeight * 0.9 : this.gameHeight * 0.82;
         activeContainer.setPosition(this.gameWidth * 0.5, this.gameHeight + 450);
         activeContainer.setRotation(step.toolType === 'gun' ? Math.PI / 2 + Phaser.Math.DegToRad(-90) : 0);
@@ -625,9 +1105,9 @@ export class GameScene extends Phaser.Scene {
         this.uiCamera = this.cameras.add(0, 0, width, height);
         this.uiCamera.setZoom(1.0);
 
-        const uiElements = [this.topUI];
+        const uiElements = [this.topUI, this.toolSelectionContainer, this.introContainer];
         if (this.ctaBtn) uiElements.push(this.ctaBtn);
-        this.cameras.main.ignore(uiElements);
+        this.cameras.main.ignore(uiElements.filter(Boolean));
 
         const worldElements = [
             this.bg,
@@ -831,7 +1311,7 @@ export class GameScene extends Phaser.Scene {
                 this.startSpraySound();
             }
 
-            this.setCameraZoomSmooth(1 / 1.2, 700);
+            this.setCameraZoomSmooth(1 / 1.6, 700);
 
             this.lastCanvasX = null;
             this.lastCanvasY = null;
@@ -856,7 +1336,7 @@ export class GameScene extends Phaser.Scene {
             this.lastV = null;
 
             if (!this.isGameEnd) {
-                this.setCameraZoomSmooth(1 / 1.4, 700);
+                this.setCameraZoomSmooth(1 / 2, 700);
             }
 
             this.targetShiftX = 0;
@@ -1337,12 +1817,20 @@ export class GameScene extends Phaser.Scene {
 
         this.baseTrophyX = width / 2;
         this.baseBgX = width / 2 - 10;
-        this.baseTrophyY = height * 0.48;
-        this.baseBgY = height / 2;
-        this.trophyY = this.baseTrophyY + this.currentShiftY;
+        this.baseTrophyY = height * 0.38;
+        this.baseBgY = height * 0.35;
+        const currentBgY = this.isIntro ? (this.baseBgY + (this.introOffsetY || 135)) : this.baseBgY;
+        const currentTrophyY = this.isIntro ? (this.baseTrophyY + (this.introOffsetY || 135)) : this.baseTrophyY;
+        this.trophyY = currentTrophyY + this.currentShiftY;
         this.trophyX = this.baseTrophyX + this.currentShiftX;
 
-        this.resizeBackground();
+        if (this.bg) {
+            this.bg.setPosition(this.baseBgX, currentBgY);
+            const scaleX = width / this.bg.width;
+            const scaleY = height / this.bg.height;
+            const maxScale = Math.max(scaleX, scaleY) * 2.45;
+            this.bg.setScale(maxScale);
+        }
 
         const targetTrophyHeight = Math.min(height * 0.58, 540);
         const scale = targetTrophyHeight / 1000;
@@ -1353,7 +1841,7 @@ export class GameScene extends Phaser.Scene {
         if (this.trophyBase) {
             this.trophyBase.setPosition(this.trophyX, this.trophyY).setDisplaySize(this.trophyDisplayW, this.trophyDisplayH);
             if (this.trophyShadow) {
-                this.trophyShadow.setPosition(this.trophyX, this.trophyY + 145);
+                this.trophyShadow.setPosition(this.trophyX, this.trophyY);
             }
             this.trophyGlow.setPosition(this.trophyX, this.trophyY);
             if (this.trophyMud) {
@@ -1361,8 +1849,16 @@ export class GameScene extends Phaser.Scene {
             }
         }
 
+        if (this.introContainer) {
+            this.introContainer.setPosition(width / 2, height / 2);
+        }
+
         if (this.topUI) {
             this.topUI.setPosition(width / 2, Math.max(50, height * 0.08));
+        }
+
+        if (this.toolSelectionContainer) {
+            this.toolSelectionContainer.setPosition(width / 2, Math.min(height * 0.85, height - 90));
         }
 
         if (this.ctaBtn) {
