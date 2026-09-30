@@ -438,7 +438,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     ShowStore() {
-        const storeUrl = 'https://play.google.com/store/apps/details?id=com.d28.makeover.asmr.home.cleaning.game';
+        const storeUrl = 'https://play.google.com/store/apps/details?id=com.home.cleaning.makeover.game.perfect.asmr.d28b';
         if (typeof window.install === 'function') return window.install();
         if (typeof ExitApi !== 'undefined' && typeof ExitApi.exit === 'function') return ExitApi.exit();
         if (typeof mraid !== 'undefined' && typeof mraid.open === 'function') return mraid.open(storeUrl);
