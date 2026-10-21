@@ -27,6 +27,8 @@ import waterDropsImg from './assets/Texture/water_drops.webp';
 import sparkleSnd from './assets/Sound/sparkle.mp3';
 import winSnd from './assets/Sound/win.mp3';
 import clickSnd from './assets/Sound/click.mp3';
+import bgMusicSnd from './assets/Sound/bg_music.mp3';
+import sweatSnd from './assets/Sound/sweat.mp3';
 
 export class GameScene extends Phaser.Scene {
     constructor() {
@@ -59,6 +61,8 @@ export class GameScene extends Phaser.Scene {
         this.load.audio('sparkle', sparkleSnd);
         this.load.audio('win', winSnd);
         this.load.audio('click', clickSnd);
+        this.load.audio('bg_music', bgMusicSnd);
+        this.load.audio('sweat', sweatSnd);
 
         // Tạo mảnh pháo hoa giấy (Confetti) hình chữ nhật nhỏ
         let cGraphics = this.make.graphics({ x: 0, y: 0, add: false });
@@ -107,6 +111,17 @@ export class GameScene extends Phaser.Scene {
         this.sparkleSound = this.sound.add('sparkle', { volume: 0.8 });
         this.winSound = this.sound.add('win', { volume: 0.9 });
         this.clickSound = this.sound.add('click', { volume: 0.8 });
+        this.bgMusic = this.sound.add('bg_music', { volume: 0.35, loop: true });
+        this.clothSound = this.sound.add('sweat', { volume: 0.85, loop: true });
+
+        // Tự động phát nhạc nền (và mở khoá khi người dùng tương tác lần đầu)
+        this.playBgMusic();
+        this.input.once('pointerdown', () => {
+            if (this.sound.context && this.sound.context.state === 'suspended') {
+                this.sound.context.resume();
+            }
+            this.playBgMusic();
+        });
 
         // Khởi tạo bộ tạo âm thanh xịt nước áp lực cao (Web Audio Synthesis)
         this.createProceduralWaterSound();
@@ -496,6 +511,7 @@ export class GameScene extends Phaser.Scene {
     showUpgradeButton() {
         if (this.hasTriggeredUpgrade) return;
         this.hasTriggeredUpgrade = true;
+        this.stopClothSound();
 
         const width = this.gameWidth;
         const height = this.gameHeight;
@@ -599,6 +615,7 @@ export class GameScene extends Phaser.Scene {
         if (!this.upgradeBtn) return;
 
         this.clickSound.play();
+        this.stopClothSound();
 
         // Ẩn nút upgrade
         this.tweens.add({
@@ -762,6 +779,16 @@ export class GameScene extends Phaser.Scene {
         }
     }
 
+    playBgMusic() {
+        if (this.bgMusic && !this.bgMusic.isPlaying) {
+            try {
+                this.bgMusic.play();
+            } catch (e) {
+                // Autoplay blocked until user interaction
+            }
+        }
+    }
+
     createProceduralWaterSound() {
         if (!this.sound.context) return;
         const ctx = this.sound.context;
@@ -858,6 +885,28 @@ export class GameScene extends Phaser.Scene {
         }
     }
 
+    startClothSound() {
+        if (!this.clothSound) return;
+        try {
+            if (this.sound.context && this.sound.context.state === 'suspended') {
+                this.sound.context.resume();
+            }
+            if (!this.clothSound.isPlaying) {
+                this.clothSound.play();
+            }
+        } catch (e) {
+            console.warn('Cloth sound error:', e);
+        }
+    }
+
+    stopClothSound() {
+        if (this.clothSound && this.clothSound.isPlaying) {
+            try {
+                this.clothSound.stop();
+            } catch (e) {}
+        }
+    }
+
     setupInput() {
         this.input.on('pointerdown', (pointer) => {
             if (this.isGameEnd || !this.canClean) {
@@ -872,7 +921,8 @@ export class GameScene extends Phaser.Scene {
             this.isSpraying = true;
 
             if (this.isRagMode) {
-                // Rag mode: không âm thanh xịt, không zoom
+                // Rag mode: âm thanh lau khăn nhẹ nhàng
+                this.startClothSound();
                 // Bắt đầu đếm thời gian sử dụng khăn (2s → hiện upgrade)
                 if (!this.ragUsageTimer && !this.hasTriggeredUpgrade) {
                     this.ragUsageTimer = this.time.delayedCall(2000, () => {
@@ -903,8 +953,7 @@ export class GameScene extends Phaser.Scene {
             this.isSpraying = false;
 
             if (this.isRagMode) {
-                // Rag mode: dừng timer khi thả tay (không tích lũy thời gian rời khỏi)
-                // Không dừng timer — cứ để chạy sau 2s từ lần chạm đầu tiên
+                this.stopClothSound();
             } else {
                 // Gun mode: dừng âm thanh và zoom về
                 this.stopSpraySound();
@@ -950,6 +999,9 @@ export class GameScene extends Phaser.Scene {
             // === RAG MODE: Di chuyển khăn theo ngón tay ===
             if (this.ragContainer) {
                 this.ragContainer.setPosition(pointerX, pointerY);
+            }
+            if (this.isSpraying && this.clothSound && !this.clothSound.isPlaying) {
+                this.startClothSound();
             }
 
             // Mud splatter khi khăn chà trên trophy — world-space, one-shot
@@ -1191,6 +1243,7 @@ export class GameScene extends Phaser.Scene {
         this.targetShiftX = 0;
         this.targetBgShiftX = 0;
         this.stopSpraySound();
+        this.stopClothSound();
         this.waterGraphics.clear();
         this.waterStreamEmitter.stop();
         if (this.waterDropsEmitter) this.waterDropsEmitter.stop();

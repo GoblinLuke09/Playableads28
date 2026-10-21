@@ -40,8 +40,15 @@ window.gameStart = function() {
     if (game && game.sound && game.sound.context && game.sound.context.state === 'suspended') {
         game.sound.context.resume();
     }
+    const scene = game.scene.getScene('GameScene');
+    if (scene && scene.playBgMusic) {
+        scene.playBgMusic();
+    }
 };
 
 window.gameClose = function() {
     console.log("Playturbo: gameClose triggered");
+    if (game && game.sound) {
+        game.sound.stopAll();
+    }
 };
